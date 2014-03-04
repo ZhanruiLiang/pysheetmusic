@@ -9,7 +9,7 @@ def get_path(*subPaths):
 SHEETS = [
     'Air.mxl',
     'Allegretto_in_C_Major_for_Guitar_by_Carcassi_-_arr._by_Gerry_Busch.mxl',
-    'Allegro_by_Bernardo_Palma_V..mxl',
+    'Allegro_by_Bernardo_Palma_V.mxl',
     'Almain.mxl',
     'Auld_Lang_Syne_guitar.mxl',
     'Chrono_Cross_-_Frozen_Flame.mxl',
@@ -42,14 +42,21 @@ SHEETS = [
 
 class TestViewer(unittest.TestCase):
     def test_viewer(self):
-        viewer = M.viewer.SheetViewer()
-        window = ui.Window()
-        window.root.children.append(viewer)
-        window.start()
+        parser = M.parse.MusicXMLParser()
+        i = 0
+        for name in SHEETS[:]:
+            print('sheet #{}'.format(i))
+            i += 1
+            viewer = M.viewer.SheetViewer()
+            window = ui.Window(width=1000, height=800)
+            window.root.children.append(viewer)
+            sheet = parser.parse(get_path('sheets', name))
+            viewer.canvas.set_page(sheet.pages[0])
+            window.start()
 
     def test_renders(self):
         window = ui.Window()
-        for cls in (M.render.LineRender, M.render.BeamRender):
+        for cls in (M.render.LineRender, M.render.BeamRender, M.render.TextureRender):
             render = cls()
             render.glId
             render.free()
@@ -62,5 +69,6 @@ class TestParser(unittest.TestCase):
 
 if __name__ == '__main__':
     import crash_on_ipy
-    # TestParser().test_parser()
-    TestViewer().test_renders()
+    TestParser().test_parser()
+    # TestViewer().test_renders()
+    # TestViewer().test_viewer()

@@ -93,7 +93,7 @@ class ImagePack:
         print('rate: {}, transpose: {}'.format(maxRate, transpose))
         return swap(bestSize), list(map(swap, bestPos)), maxRate
 
-    def pack(self, transpose=False):
+    def pack(self):
         """
         Calculate self.size, self.positions, self.rate
         """
@@ -130,6 +130,7 @@ class ImagePack:
             surface.blit(image, pos)
         return surface
 
+
 def pack_dir(dirPath, output, margin=10):
     import os
     import json
@@ -147,14 +148,26 @@ def pack_dir(dirPath, output, margin=10):
     pygame.image.save(resultImage, output + '.png')
     rects = {}
     centers = {}
+    try:
+        centers.update(json.load(open(output + '.json'))['centers'])
+    except FileNotFoundError:
+        pass
+    except IsADirectoryError:
+        pass
     config = {'rects': rects, 'centers': centers}
     for name, image, pos in zip(names, images, imagePack.positions):
         x, y = pos
         w, h = image.get_size()
+        # x -= margin
+        # y -= margin
+        # w -= 2 * margin
+        # h -= 2 * margin
         rects[name] = (x, y, w, h)
-        centers[name] = (0, 0)
+        if name not in centers:
+            centers[name] = (w//2, h//2)
     json.dump(config, open(output + '.json', 'w'))
     print('saved to {}'.format(output + '.png'))
+
 
 def padded_image(image, margin):
     w, h = image.get_size()
