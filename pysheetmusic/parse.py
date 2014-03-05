@@ -115,6 +115,10 @@ class MusicXMLParser:
             measure.set_clef(S.Clef(node.find('clef')))
         # Time
         # Key
+        if node.find('key') is not None:
+            key = S.KeySignature(
+                int(node.find('key/fifths').text), node.find('key/mode'))
+            measure.set_key(key)
 
     # @profile
     def handle_note(self, context, node):
@@ -127,10 +131,12 @@ class MusicXMLParser:
             pass #TODO
         else:
             isChord = node.find('chord') is not None
+            # Use lambda here to mimic the lazy behavior
             duration = lambda: \
                 Fraction(node.find('duration').text) / measure.timeDivisions / 4
             dots = lambda: [None] * len(node.xpath('dot'))
             type = lambda: monad(node.find('type'), lambda x:x.text, None)
+            timeMod = lambda: S.TimeModification(node.find('time-modification'))
 
             def pos():
                 try:
@@ -143,7 +149,7 @@ class MusicXMLParser:
                 stem = monad(node.find('stem'), S.Stem, None) if not isChord else None
                 accidental = monad(node.find('accidental'), S.Accidental, None)
                 note = S.PitchedNote(
-                    pos(), duration(), dots(), type(),
+                    pos(), duration(), timeMod(), dots(), type(),
                     pitch, stem, accidental)
                 measure.add_note(note, isChord)
                 stem = note.stem
@@ -164,7 +170,7 @@ class MusicXMLParser:
                             measure.add_beam(beam)
                         beam.add_stem(stem)
             elif node.find('rest') is not None:
-                note = S.Rest(pos(), duration(), dots(), type())
+                note = S.Rest(pos(), duration(), timeMod(), dots(), type())
                 measure.add_note(note, isChord)
 
     def handle_forward(self, context, node):

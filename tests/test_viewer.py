@@ -8,8 +8,10 @@ def get_path(*subPaths):
     return join(dirname(__file__), *subPaths)
 
 SHEETS = [
+    'Chrono_Cross_-_Quitting_the_Body.mxl',
     'Fernando_Sor_Op.32_Mazurka.mxl',
     'Divertimento_No._1.mxl',
+    'Jeux_interdits.mxl',
     'Giuliani_-_Op.50_No.1.mxl',
     'Guitar_Solo_No._116_in_A_Major.mxl',
     'Air.mxl',
@@ -18,7 +20,6 @@ SHEETS = [
     'Almain.mxl',
     'Auld_Lang_Syne_guitar.mxl',
     'Chrono_Cross_-_Frozen_Flame.mxl',
-    'Chrono_Cross_-_Quitting_the_Body.mxl',
     'Fernando_Sor_Op.32_Andante_Pastorale.mxl',
     'Fernando_Sor_Op.32_Andantino.mxl',
     'Fernando_Sor_Op.32_Galop.mxl',
@@ -26,7 +27,6 @@ SHEETS = [
     'Guitar_Solo_No._118_-_Barcarolle_in_A_Minor.mxl',
     'Guitar_Solo_No._119_in_G_Major.mxl',
     'Guitar_Solo_No._15_in_E_Major.mxl',
-    'Jeux_interdits.mxl',
     'Lagrima.mxl',
     'Lute_Suite_No._1_in_E_Major_BWV_1006a_J.S._Bach.mxl',
     'Maria_Luisa_Mazurka_guitar_solo_the_original_composition.mxl',
@@ -85,8 +85,28 @@ class TestParser(unittest.TestCase):
         for name in SHEETS:
             sheet = parser.parse(get_path('sheets', name))
 
+    def test_key_signagure(self):
+        for mode in ('major', 'minor'):
+            assert M.sheet.KeySignature(0, mode).names == ''
+            assert M.sheet.KeySignature(1, mode).names == 'F'
+            assert M.sheet.KeySignature(2, mode).names == 'FC'
+            assert M.sheet.KeySignature(3, mode).names == 'FCG'
+            assert M.sheet.KeySignature(4, mode).names == 'FCGD'
+            assert M.sheet.KeySignature(5, mode).names == 'FCGDA'
+            assert M.sheet.KeySignature(6, mode).names == 'FCGDAE'
+            assert M.sheet.KeySignature(7, mode).names == 'FCGDAEB'
+            assert M.sheet.KeySignature(-1, mode).names == 'B'
+            assert M.sheet.KeySignature(-2, mode).names == 'BE'
+            assert M.sheet.KeySignature(-3, mode).names == 'BEA'
+            assert M.sheet.KeySignature(-4, mode).names == 'BEAD'
+            assert M.sheet.KeySignature(-5, mode).names == 'BEADG'
+            assert M.sheet.KeySignature(-6, mode).names == 'BEADGC'
+            assert M.sheet.KeySignature(-7, mode).names == 'BEADGCF'
+
+
 if __name__ == '__main__':
     import crash_on_ipy
     # TestParser().test_parser()
+    # TestParser().test_key_signagure()
     # TestViewer().test_renders()
     TestViewer().test_viewer()

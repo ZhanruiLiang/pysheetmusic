@@ -21,7 +21,7 @@ class Texture(Sprite):
     _config = None
     TEMPLATE_DPI = 500
     MARGIN = 10
-    TEXTURE_TO_TENTHS = 900 / (7 * TEMPLATE_DPI)
+    TEXTURE_TO_TENTHS = 950 / (7 * TEMPLATE_DPI)
 
     def __init__(self, pos, name):
         self.pos = pos

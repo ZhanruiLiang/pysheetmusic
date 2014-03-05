@@ -10,6 +10,17 @@ def link(node1, node2):
     node1.next = node2
     node2.prev = node1
 
+def is_sprite_collide(sp1, sp2):
+    for i in range(2):
+        x1 = sp1.pos[i] - sp1.center[i]
+        x2 = x1 + sp1.size[i]
+        x3 = sp2.pos[i] - sp2.center[i]
+        x4 = x3 + sp2.size[i]
+        if not max(x1, x3) < min(x2, x4):
+            return False
+    return True
+
+
 class Margins:
     top = 0.
     bottom = 0.
@@ -189,6 +200,7 @@ class Measure:
         self.timeCurrent = refMeasure.timeCurrent + 0
         self.timeDivisions = refMeasure.timeDivisions
         self.clef = refMeasure.clef.copy()
+        self.key = refMeasure.key
 
     def add_beam(self, beam):
         self.beams.append(beam)
@@ -208,6 +220,9 @@ class Measure:
     def set_clef(self, clef):
         self.clef = clef
 
+    def set_key(self, key):
+        self.key = key
+
     def finish(self):
         y0 = y = self.y
         x1 = self.x
@@ -220,7 +235,9 @@ class Measure:
         # add_sprite(sprite.Line(start=(x1, y0), end=(x1, y), width=self.BAR_WIDTH))
         add_sprite(sprite.Line(start=(x2, y0), end=(x2, y), width=self.BAR_WIDTH))
 
+        self._beginX = self.x
         self.layout_clef()
+        self.layout_key()
         self.layout_notes()
         self.layout_beams()
         self.layout_accidentals()
@@ -234,10 +251,27 @@ class Measure:
             clef.sprite.pos = (self.x + cx + 5, self.get_line_y(clef.line))
             self.page.add_sprite(clef.sprite)
             self._beginX = clef.sprite.pos[0] + clef.sprite.size[0] - clef.sprite.center[0] + 5
-        else:
-            self._beginX = self.x + 5
 
-    ADD_LINE_WIDTH = 16
+    def layout_key(self):
+        if not self.isNewSystem:
+            return
+        add_sprite = self.page.add_sprite
+        key = self.key
+        type = 'sharp' if key.fifths >= 0 else 'flat'
+        sp = sprite.Texture(None, type)
+        x = self._beginX + sp.center[0]
+        dx = sp.size[0]
+        for name in key.names:
+            if self.clef.sign == 'G':
+                octave = 4 if name in 'CDEFG' else 3
+            else:
+                # TODO: Calculate octave correctly
+                octave = self.clef.octave
+            y = self.get_pitch_y(name, octave)
+            add_sprite(sprite.Texture((x, y), type))
+            x += dx
+
+    ADD_LINE_WIDTH = 18
     ADD_LINE_THICK = 2
 
     def layout_notes(self):
@@ -275,10 +309,7 @@ class Measure:
 
         for note in self.notes:
             if isinstance(note, PitchedNote):
-                y = self.get_line_y(
-                    (self.get_abs_step(note.pitch.step, note.pitch.octave)
-                    - self.get_abs_step(self.clef.sign, self.clef.octave)) / 2
-                    + self.clef.line)
+                y = self.get_pitch_y(note.pitch.step, note.pitch.octave)
             elif isinstance(note, Rest): 
                 if note.type == 'whole':
                     y = self.get_line_y(4)
@@ -390,10 +421,42 @@ class Measure:
                     add_sprite(sprite.Texture(pos, type))
 
     def layout_accidentals(self):
-        pass
-
+        add_sprite = self.page.add_sprite
+        sps = []
+        for note in self.iter_pitched_notes():
+            if not note.accidental:
+                continue
+            accidental = note.accidental
+            sp = accidental.sprite
+            x, y = note.pos
+            noteW, noteH = note.sprite.size
+            acciW, accH = sp.size
+            sp.pos = x - noteW / 2 - acciW / 2 - 3, y
+            sps.append(sp)
+        sps.sort(key=lambda sp: (sp.pos[1], sp.pos[0]))
+        for i in range(len(sps)):
+            sp = sps[i]
+            x, y = sp.pos
+            iterCount = 0
+            while iterCount < 5:
+                for j in range(i):
+                    if is_sprite_collide(sps[i], sps[j]):
+                        break
+                else:
+                    break
+                x -= 5
+                sp.pos = (x, y)
+                iterCount += 1
+            add_sprite(sp)
+            
     def get_abs_step(self, step, octave):
         return octave * 7 + 'CDEFGAB'.index(step.upper())
+
+    def get_pitch_y(self, step, octave):
+        return self.get_line_y(
+            (self.get_abs_step(step, octave)
+            - self.get_abs_step(self.clef.sign, self.clef.octave)) / 2
+            + self.clef.line)
 
     def add_note(self, note, chord=False):
         if not self.notes:
@@ -405,7 +468,7 @@ class Measure:
         else:
             note.chordRoot = note
             note.timeStart = self.timeCurrent
-            self.timeCurrent += note.duration
+            self.timeCurrent += note.duration * note.timeMod.value
         self.notes.append(note)
         note.measure = self
 
@@ -415,9 +478,10 @@ class Measure:
 
 
 class Note:
-    def __init__(self, pos, duration, dots):
+    def __init__(self, pos, duration, timeMod, dots):
         self.pos = pos
         self.duration = duration
+        self.timeMod = timeMod
         self.dots = dots
         self.sprite = self.make_sprite()
         self.measure = None
@@ -540,13 +604,13 @@ class PitchedNote(Note):
     TYPE_TO_NAME = {
         'whole': 'head-1', 'half': 'head-2', 'quarter': 'head-4',
     }
-    def __init__(self, pos, duration, dots, type, pitch, stem, accidental):
+    def __init__(self, pos, duration, timeMod, dots, type, pitch, stem, accidental):
         self._stem = None
         self.pitch = pitch
         self.type = type
         self.stem = stem
         self.accidental = accidental
-        super().__init__(pos, duration, dots)
+        super().__init__(pos, duration, timeMod, dots)
 
     @property
     def stem(self):
@@ -592,7 +656,7 @@ class Rest(Note):
         Fraction(1, 128): '128th',
     }
 
-    def __init__(self, pos, duration, dots, type):
+    def __init__(self, pos, duration, timeMod, dots, type):
         """
         pos can be None, so that it can be assigned later.
         type can be None, then it's value will be guessed by duration.
@@ -600,7 +664,7 @@ class Rest(Note):
         dots is a list of dots position. Each element can also be None.
         """
         self.type = type if type else self.DURATION_TO_TYPE.get(duration, 'whole')
-        super().__init__(pos, duration, dots)
+        super().__init__(pos, duration, timeMod, dots)
 
     def make_sprite(self):
         name = self.TYPE_TO_NAME.get(self.type, 'rest-128')
@@ -654,3 +718,25 @@ class Beam:
         y1s = np.interp(x1s, xs, ys)
         for x, y, stem in zip(x1s, y1s, self.stems):
             stem.tail = (x, y)
+
+
+class TimeModification:
+    def __init__(self, xmlnode):
+        if xmlnode == None:
+            self.value = Fraction(1)
+        else:
+            self.value = Fraction(
+                int(xmlnode.find('normal-notes').text),
+                int(xmlnode.find('actual-notes').text))
+
+
+class KeySignature:
+    ORDER = 'FCGDAEB'
+
+    def __init__(self, fifths, mode):
+        self.mode = mode
+        self.fifths = fifths
+        if fifths >= 0:
+            self.names = self.ORDER[:fifths]
+        else:
+            self.names = self.ORDER[::-1][:-fifths]
