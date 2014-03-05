@@ -89,6 +89,8 @@ class TextureRender(Render):
             buffer[(i, i + 1, i + 4), 3] = v2
             i += 6
         buffer[:, (2, 3)] /= self.textureSize
+        if self.buffer:
+            self.buffer.free()
         self.buffer = gl.VertexBuffer(buffer)
 
     def render(self):
@@ -122,6 +124,10 @@ class LineRender(Render):
             buffer[i, (0, 1)] = line.start
             buffer[i, (2, 3)] = line.end
             buffer[i, 4] = line.width
+        if self.lineBuffer:
+            self.lineBuffer.free()
+        if self.widthBuffer:
+            self.widthBuffer.free()
         self.lineBuffer = gl.VertexBuffer(buffer[:, :4])
         self.widthBuffer = gl.VertexBuffer(buffer[:, 4])
 
@@ -152,6 +158,10 @@ class BeamRender(Render):
             buffer[i, (0, 1)] = beam.start
             buffer[i, (2, 3)] = beam.end
             buffer[i, 4] = beam.height
+        if self.lineBuffer:
+            self.lineBuffer.free()
+        if self.heightBuffer:
+            self.heightBuffer.free()
         self.lineBuffer = gl.VertexBuffer(buffer[:, :4])
         self.heightBuffer = gl.VertexBuffer(buffer[:, 4])
 

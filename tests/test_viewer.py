@@ -1,5 +1,6 @@
 import unittest
 import raygllib.ui as ui
+import raygllib.ui.key as K
 import pysheetmusic as M
 from os.path import join, dirname
 
@@ -7,6 +8,10 @@ def get_path(*subPaths):
     return join(dirname(__file__), *subPaths)
 
 SHEETS = [
+    'Fernando_Sor_Op.32_Mazurka.mxl',
+    'Divertimento_No._1.mxl',
+    'Giuliani_-_Op.50_No.1.mxl',
+    'Guitar_Solo_No._116_in_A_Major.mxl',
     'Air.mxl',
     'Allegretto_in_C_Major_for_Guitar_by_Carcassi_-_arr._by_Gerry_Busch.mxl',
     'Allegro_by_Bernardo_Palma_V.mxl',
@@ -14,13 +19,9 @@ SHEETS = [
     'Auld_Lang_Syne_guitar.mxl',
     'Chrono_Cross_-_Frozen_Flame.mxl',
     'Chrono_Cross_-_Quitting_the_Body.mxl',
-    'Divertimento_No._1.mxl',
     'Fernando_Sor_Op.32_Andante_Pastorale.mxl',
     'Fernando_Sor_Op.32_Andantino.mxl',
     'Fernando_Sor_Op.32_Galop.mxl',
-    'Fernando_Sor_Op.32_Mazurka.mxl',
-    'Giuliani_-_Op.50_No.1.mxl',
-    'Guitar_Solo_No._116_in_A_Major.mxl',
     'Guitar_Solo_No._117_in_E_Minor.mxl',
     'Guitar_Solo_No._118_-_Barcarolle_in_A_Minor.mxl',
     'Guitar_Solo_No._119_in_G_Major.mxl',
@@ -44,15 +45,32 @@ class TestViewer(unittest.TestCase):
     def test_viewer(self):
         parser = M.parse.MusicXMLParser()
         i = 0
+        def quit():
+            nonlocal _quit
+            _quit = True
+            window.close()
+        def change_page(delta):
+            nonlocal currentPage
+            currentPage = (currentPage + delta) % len(sheet.pages)
+            page = sheet.pages[currentPage]
+            viewer.canvas.set_page(page)
+            print('page', currentPage + 1, '/', len(sheet.pages))
+        _quit = False
         for name in SHEETS[:]:
             print('sheet #{}'.format(i))
             i += 1
             viewer = M.viewer.SheetViewer()
             window = ui.Window(width=1000, height=800)
             window.root.children.append(viewer)
+            window.add_shortcut(K.chain(K.Q), quit)
+            window.add_shortcut(K.chain(K.RIGHT), change_page, 1)
+            window.add_shortcut(K.chain(K.LEFT), change_page, -1)
             sheet = parser.parse(get_path('sheets', name))
-            viewer.canvas.set_page(sheet.pages[0])
+            currentPage = 0
+            change_page(0)
             window.start()
+            if _quit:
+                break
 
     def test_renders(self):
         window = ui.Window()
@@ -69,6 +87,6 @@ class TestParser(unittest.TestCase):
 
 if __name__ == '__main__':
     import crash_on_ipy
-    TestParser().test_parser()
+    # TestParser().test_parser()
     # TestViewer().test_renders()
-    # TestViewer().test_viewer()
+    TestViewer().test_viewer()

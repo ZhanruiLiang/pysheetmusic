@@ -148,7 +148,15 @@ class Page:
 
 class Measure:
     BAR_WIDTH = 2.5
-    LINE_WIDTH = 1.2
+    LINE_THICK = 1.5
+
+    DURATION_TO_TAIL_TYPE = {
+        Fraction(1, 8): 'tail-8',
+        Fraction(1, 16): 'tail-16',
+        Fraction(1, 32): 'tail-32',
+        Fraction(1, 64): 'tail-64',
+        Fraction(1, 128): 'tail-128',
+    }
 
     def __init__(self, xmlnode):
         self.notes = []
@@ -206,15 +214,16 @@ class Measure:
         x2 = self.x + self.width
         add_sprite = self.page.add_sprite
         for i in range(5):
-            add_sprite(sprite.Line(start=(x1, y), end=(x2, y), width=self.LINE_WIDTH))
+            add_sprite(sprite.Line(start=(x1, y), end=(x2, y), width=self.LINE_THICK))
             y += self.staffSpacing
         y -= self.staffSpacing
-        add_sprite(sprite.Line(start=(x1, y0), end=(x1, y), width=self.BAR_WIDTH))
+        # add_sprite(sprite.Line(start=(x1, y0), end=(x1, y), width=self.BAR_WIDTH))
         add_sprite(sprite.Line(start=(x2, y0), end=(x2, y), width=self.BAR_WIDTH))
 
         self.layout_clef()
         self.layout_notes()
         self.layout_beams()
+        self.layout_accidentals()
         for note in self.notes:
             note.finish()
 
@@ -228,8 +237,8 @@ class Measure:
         else:
             self._beginX = self.x + 5
 
-    ADD_LINE_WIDTH = 20
-    ADD_LINE_HEIGHT = 2
+    ADD_LINE_WIDTH = 16
+    ADD_LINE_THICK = 2
 
     def layout_notes(self):
         if not self.notes:
@@ -281,7 +290,7 @@ class Measure:
 
         add_sprite = self.page.add_sprite
         w = self.ADD_LINE_WIDTH
-        h = self.ADD_LINE_HEIGHT
+        h = self.ADD_LINE_THICK
         dy = self.staffSpacing
         for note in self.notes:
             x, y = note.pos
@@ -305,49 +314,83 @@ class Measure:
     def layout_beams(self):
         add_sprite = self.page.add_sprite
         for beam in sorted(self.beams, key=lambda b: -len(b.stems)):
-            anchors = list(filter(bool, map(Stem.next_beam_pos, beam.stems)))
-            if len(anchors) >= 2:
-                leftMost = min(anchors)
-                rightMost = max(anchors)
-                beam.set_geometry(leftMost, rightMost)
-            # elif len(anchors) == 1:
-            #     pass  # TODO
+            if beam.type == beam.TYPE_FORWARD:
+                stem1 = beam.stems[0]
+                stem2 = stem1.next_stem()
+                pos1 = stem1.next_beam_pos()
+                pos2 = stem2.next_beam_pos()
+                if pos1 and pos2:
+                    beam.set_geometry(pos1, pos2)
+            elif beam.type == beam.TYPE_BACKWARD:
+                stem2 = beam.stems[0]
+                stem1 = stem2.prev_stem()
+                pos1 = stem1.next_beam_pos()
+                pos2 = stem2.next_beam_pos()
+                if pos1 and pos2:
+                    beam.set_geometry(pos1, pos2)
             else:
-                upStems = [stem for stem in beam.stems if stem.direction == 'up']
-                downStems = [stem for stem in beam.stems if stem.direction == 'down']
-                minX = min(stem.head[0] for stem in beam.stems)
-                maxX = max(stem.head[0] for stem in beam.stems)
-                minY = lambda: max(stem.tail[1] for stem in upStems)
-                maxY = lambda: min(stem.tail[1] for stem in downStems)
-                if not upStems:
-                    y1 = y2 = maxY()
-                elif not downStems:
-                    y1 = y2 = minY()
+                anchors = list(filter(bool, map(Stem.next_beam_pos, beam.stems)))
+                if len(anchors) >= 2:
+                    leftMost = min(anchors)
+                    rightMost = max(anchors)
+                    beam.set_geometry(leftMost, rightMost)
+                # elif len(anchors) == 1:
+                #     pass  # TODO
                 else:
-                    y1 = y2 = (minY + maxY) / 2
-                beam.set_geometry((minX, y1), (maxX, y2))
-            beam.adjust_stems()
+                    assert len(beam.stems) >= 2
+                    tails = [stem.tail for stem in beam.stems]
+                    tails.sort()
+                    A = np.array(tails, dtype=np.float)
+                    B = A[:, 1].copy()
+                    A[:, 1] = 1
+                    if len(beam.stems) > 20:
+                        X = np.linalg.lstsq(A, B)[0]
+                    else:
+                        minError = None
+                        for k in (-.2, -.1, -.02, .02, .1, .2):
+                            up = [i for i, stem in enumerate(beam.stems)
+                                if stem.direction == 'up']
+                            down = [i for i, stem in enumerate(beam.stems)
+                                if stem.direction == 'down']
+                            bLimits = B - k * A[:, 0]
+                            if not up:
+                                b = bLimits[down].min()
+                            elif not down:
+                                b = bLimits[up].max()
+                            else:
+                                bMin = bLimits[up].max()
+                                bMax = bLimits[down].min()
+                                b = (bMin + bMax) / 2
+                            X = [k, b]
+                            error = ((A.dot(X) - B) ** 2).sum()
+                            if minError is None or error < minError:
+                                minError = error
+                                bestX = X
+                        X = bestX
+                    x1 = A[0, 0]
+                    y1 = A[0, :].dot(X)
+                    x2 = A[-1, 0]
+                    y2 = A[-1, :].dot(X)
+                    beam.set_geometry((x1, y1), (x2, y2))
+                    beam.adjust_stems()
             for stem in beam.stems:
                 stem.beamDrawn += 1
             add_sprite(beam.sprite)
-        DURATION_TO_TYPE = {
-            Fraction(1, 8): 'tail-8',
-            Fraction(1, 16): 'tail-16',
-            Fraction(1, 32): 'tail-32',
-            Fraction(1, 64): 'tail-64',
-            Fraction(1, 128): 'tail-128',
-        }
+
         for note in self.iter_pitched_notes():
             stem = note.stem
             if stem and note.duration < Fraction(1, 4):
                 if stem.beamDrawn < len(stem.beams) \
                         or (stem.beamDrawn == 0 and not stem.beams):
                     stem.beamDrawn += 1
-                    type = DURATION_TO_TYPE.get(note.duration, 'tail-128')
+                    type = self.DURATION_TO_TAIL_TYPE.get(note.duration, 'tail-128')
                     if stem.direction == 'up':
                         type = type.replace('tail', 'tail-up')
                     pos = note.stem.tail
                     add_sprite(sprite.Texture(pos, type))
+
+    def layout_accidentals(self):
+        pass
 
     def get_abs_step(self, step, octave):
         return octave * 7 + 'CDEFGAB'.index(step.upper())
@@ -393,7 +436,7 @@ class Note:
         add_sprite = self.measure.page.add_sprite
         for i, dot in enumerate(self.dots):
             if dot is None:
-                dot = x + w / 2 + 5 + 3 * i, y - h / 4
+                dot = x + w / 2 + 4 + 5 * i, y - h / 4
             # Each dot is a tuple, representing the position.
             add_sprite(sprite.Texture(dot, 'dot'))
 
@@ -410,6 +453,10 @@ class Stem:
         self.notes = []
         self.beamDrawn = 0
         self._geometrySet = False
+
+    def __repr__(self):
+        return 'Stem(notes={}, beams={}, beamDrawn={})'.format(
+            len(self.notes), len(self.beams), self.beamDrawn)
 
     def set_geometry(self):
         if self._geometrySet:
@@ -442,9 +489,28 @@ class Stem:
             return None
         x, y = self.tail
         if self.direction == 'up':
-            return x, y - self.beamDrawn * (Beam.THICK + Beam.GAP) - Beam.THICK
+            return x, y - self.beamDrawn * (Beam.THICK + Beam.GAP)
         else:
             return x, y + self.beamDrawn * (Beam.THICK + Beam.GAP)
+
+    def next_stem(self):
+        try:
+            beam = self.beams[0]
+            idx = beam.stems.index(self)
+            return beam.stems[idx + 1]
+        except (IndexError, ValueError):
+            return None
+
+    def prev_stem(self):
+        try:
+            beam = self.beams[0]
+            idx = beam.stems.index(self)
+            if idx - 1 >= 0:
+                return beam.stems[idx - 1]
+            else:
+                return None
+        except (IndexError, ValueError):
+            return None
 
 
 class Pitch:
@@ -552,19 +618,34 @@ class Rest(Note):
 
 class Beam:
     THICK = 6
-    GAP = 4
+    GAP = 3
+    TYPE_FORWARD = 'forward hook'
+    TYPE_BACKWARD = 'backward hook'
+    TYPE_NORMAL = 'normal'
 
-    def __init__(self):
+    def __init__(self, type=TYPE_NORMAL):
         self.stems = []
+        self.type = type
 
     def set_geometry(self, start, end):
         self.start = start
         self.end = end
-        x1, y1 = start
-        x2, y2 = end
         h = self.THICK
         t = Stem.THICK
+        x1, y1 = start
+        x2, y2 = end
+        k = 0.25
+        if self.type == self.TYPE_FORWARD:
+            x2 = x1 + (x2 - x1) * k
+            y2 = y1 + (y2 - y1) * k
+        elif self.type == self.TYPE_BACKWARD:
+            x1 = x2 + (x1 - x2) * k
+            y1 = y2 + (y1 - y2) * k
         self.sprite = sprite.Beam((x1 - t / 2, y1 - h / 2), (x2 + t / 2, y2 - h / 2), h)
+
+    def add_stem(self, stem):
+        self.stems.append(stem)
+        stem.beams.append(self)
 
     def adjust_stems(self):
         x1s = [stem.head[0] for stem in self.stems]

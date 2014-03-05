@@ -145,20 +145,24 @@ class MusicXMLParser:
                 note = S.PitchedNote(
                     pos(), duration(), dots(), type(),
                     pitch, stem, accidental)
-                beamNode = node.find('beam')
-                if stem and beamNode is not None:
-                    beamType = beamNode.text
-                    number = beamNode.attrib['number']
-                    if beamType == 'begin':
-                        beam = S.Beam()
-                        context.beams[number] = beam
-                    elif beamType == 'continue':
-                        beam = context.beams[number]
-                    elif beamType == 'end':
-                        beam = context.beams[number]
-                        measure.add_beam(beam)
-                    beam.stems.append(stem)
                 measure.add_note(note, isChord)
+                stem = note.stem
+                if stem:
+                    for beamNode in node.findall('beam'):
+                        beamType = beamNode.text
+                        number = beamNode.attrib['number']
+                        if beamType == 'begin':
+                            beam = S.Beam()
+                            context.beams[number] = beam
+                        elif beamType == 'continue':
+                            beam = context.beams[number]
+                        elif beamType == 'end':
+                            beam = context.beams[number]
+                            measure.add_beam(beam)
+                        else:
+                            beam = S.Beam(beamType)
+                            measure.add_beam(beam)
+                        beam.add_stem(stem)
             elif node.find('rest') is not None:
                 note = S.Rest(pos(), duration(), dots(), type())
                 measure.add_note(note, isChord)
