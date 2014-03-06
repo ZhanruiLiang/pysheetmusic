@@ -1,5 +1,6 @@
 import PIL.Image
 import raygllib.gllib as gl
+import raygllib.ui as ui
 import os
 import json
 import numpy as np
@@ -39,6 +40,9 @@ class Render(gl.Program):
         gl.glUniformMatrix3fv(self.get_uniform_loc('matrix'), 1, gl.GL_TRUE, self.matrix)
 
     def make_buffer(self, sprites):
+        pass
+
+    def render(self):
         pass
 
 
@@ -171,3 +175,28 @@ class BeamRender(Render):
         self.set_buffer('line', self.lineBuffer)
         self.set_buffer('height', self.heightBuffer)
         self.draw(gl.GL_POINTS, len(self.lineBuffer))
+
+
+class TextRender(ui.render.FontRender):
+    def __init__(self):
+        super().__init__()
+        self._textboxes = []
+
+    def make_buffer(self, textSps):
+        self._textboxes = list(textSps)
+
+    @property
+    def matrix(self):
+        return self._matrix
+
+    @matrix.setter
+    def matrix(self, matrix):
+        mat4 = np.eye(4, dtype=gl.GLfloat)
+        mat4[0:2, 0:2] = matrix[0:2, 0:2]
+        mat4[1, :] *= -1
+        mat4[3, 3] = matrix[2, 2]
+        mat4[0:2, 3] = matrix[0:2, 2]
+        self._matrix = mat4
+
+    def render(self):
+        self.draw_textboxs(self._textboxes)

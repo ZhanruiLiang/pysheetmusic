@@ -11,20 +11,21 @@ class SheetCanvas(ui.Canvas):
             sprite.Line: render.LineRender(),
             sprite.Texture: render.TextureRender(),
             sprite.Beam: render.BeamRender(),
+            sprite.Text: render.TextRender(),
         }
         self._scale = 3
 
     def set_page(self, page):
-        sps = {
-            sprite.Line: [],
-            sprite.Texture: [],
-            sprite.Beam: [],
-        }
+        sps = {type: [] for type in self._renders}
         for sp in page.sprites:
             sps[sp.__class__].append(sp)
         for spriteClass, sps1 in sps.items():
             self._renders[spriteClass].make_buffer(sps1)
         self._page = page
+
+    def __del__(self):
+        for render in self._renders.values():
+            render.free()
 
     def on_mouse_scroll(self, x, y, xs, ys):
         scaling = self._page.sheet.scaling

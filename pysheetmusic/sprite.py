@@ -1,5 +1,6 @@
 import os
 import json
+import raygllib.ui as ui
 
 class Sprite:
     pass
@@ -52,3 +53,29 @@ class Beam(Sprite):
         self.start = start
         self.end = end
         self.height = height
+
+
+class Text(Sprite, ui.TextBox):
+    def __init__(self, xmlnode):
+        Sprite.__init__(self)
+        justify = xmlnode.attrib.get('justify', 'center')
+        ui.TextBox.__init__(self, 
+            fontSize=int(xmlnode.attrib.get('font-size', '10')),
+            text=xmlnode.text,
+            align='center',
+            halign=xmlnode.attrib.get('valign', 'center'),
+            color=ui.Color(0., 0., 0., 1.),
+            x=float(xmlnode.attrib['default-x']),
+            y=-float(xmlnode.attrib['default-y']),
+            # autoResize=True,
+        )
+        size = self.guess_size()
+        self.width, self.height = size
+        if justify == 'center':
+            self.x -= self.width / 2
+        elif justify == 'right':
+            self.x -= self.width
+
+    def guess_size(self):
+        k = self.fontSize
+        return k * len(self.text), k

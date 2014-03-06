@@ -91,7 +91,6 @@ class Sheet:
                 Margins(pageLayout.find('page-margins[@type="even"]')),
                 Margins(pageLayout.find('page-margins[@type="odd"]'))]
         self.pages = []
-        # TODO: credits
 
     def new_page(self):
         page = Page()
@@ -196,8 +195,6 @@ class Measure:
 
     def follow_defaults(self, refMeasure):
         self.nLines = refMeasure.nLines
-        self.timeStart = refMeasure.timeCurrent + 0
-        self.timeCurrent = refMeasure.timeCurrent + 0
         self.timeDivisions = refMeasure.timeDivisions
         self.clef = refMeasure.clef.copy()
         self.key = refMeasure.key

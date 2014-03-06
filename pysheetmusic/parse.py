@@ -6,8 +6,10 @@ from contextlib import contextmanager
 from fractions import Fraction
 
 from raygllib.utils import timeit
+from raygllib import ui
 
 from . import sheet as S
+from . import sprite
 from .utils import monad
 
 
@@ -45,7 +47,7 @@ class MusicXMLParser:
         context = ParseContext()
         context.sheet = S.Sheet(xmlDoc)
         context.page = context.sheet.new_page()
-        # Support single part only.
+        # Currently we only have single part support.
         partNode = xmlDoc.find('part')
         handledTags = ('attributes', 'note', 'backup', 'forward', 'barline')
         handlers = {tag: getattr(self, 'handle_' + tag) for tag in handledTags}
@@ -67,9 +69,16 @@ class MusicXMLParser:
                 if child.tag in handlers:
                     handlers[child.tag](context, child)
             measure.finish()
+        # Parse credits
+        for creditNode in xmlDoc.findall('credit'):
+            pageNum = int(creditNode.attrib.get('page', '1')) - 1
+            page = context.sheet.pages[pageNum]
+            textNode = creditNode.find('credit-words')
+            if textNode is not None:
+                textBox = sprite.Text(textNode)
+                page.add_sprite(textBox)
+
         context.sheet.finish()
-            # print(measure)
-        # print(context.page)
         return context.sheet
 
     def handle_print(self, context, node):
@@ -126,21 +135,22 @@ class MusicXMLParser:
         cue = node.find('cue')
         measure = context.measure
         if grace is not None:
-            pass #TODO
+            pass  # TODO
         elif cue is not None:
-            pass #TODO
+            pass  # TODO
         else:
             isChord = node.find('chord') is not None
             # Use lambda here to mimic the lazy behavior
             duration = lambda: \
                 Fraction(node.find('duration').text) / measure.timeDivisions / 4
             dots = lambda: [None] * len(node.xpath('dot'))
-            type = lambda: monad(node.find('type'), lambda x:x.text, None)
+            type = lambda: monad(node.find('type'), lambda x: x.text, None)
             timeMod = lambda: S.TimeModification(node.find('time-modification'))
 
             def pos():
                 try:
-                    return float(node.attrib['default-x']), float(node.attrib['default-y'])
+                    return float(node.attrib['default-x']), \
+                        float(node.attrib['default-y'])
                 except (KeyError, ValueError):
                     return None
 
