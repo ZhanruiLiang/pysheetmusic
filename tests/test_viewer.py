@@ -1,18 +1,23 @@
 import unittest
+import pyglet
 import raygllib.ui as ui
 import raygllib.ui.key as K
 import pysheetmusic as M
+from pysheetmusic.utils import FPSCounter
 from os.path import join, dirname
 
 def get_path(*subPaths):
     return join(dirname(__file__), *subPaths)
 
 SHEETS = [
-    'Chrono_Cross_-_Quitting_the_Body.mxl',
+    'Somewhere_In_My_Memory.mxl',
+    'Fernando_Sor_Op.32_Galop.mxl',
     'Fernando_Sor_Op.32_Mazurka.mxl',
-    'Divertimento_No._1.mxl',
+    'Guitar_Solo_No._117_in_E_Minor.mxl',
     'Jeux_interdits.mxl',
+    'Divertimento_No._1.mxl',
     'Giuliani_-_Op.50_No.1.mxl',
+    'Chrono_Cross_-_Quitting_the_Body.mxl',
     'Guitar_Solo_No._116_in_A_Major.mxl',
     'Air.mxl',
     'Allegretto_in_C_Major_for_Guitar_by_Carcassi_-_arr._by_Gerry_Busch.mxl',
@@ -22,8 +27,6 @@ SHEETS = [
     'Chrono_Cross_-_Frozen_Flame.mxl',
     'Fernando_Sor_Op.32_Andante_Pastorale.mxl',
     'Fernando_Sor_Op.32_Andantino.mxl',
-    'Fernando_Sor_Op.32_Galop.mxl',
-    'Guitar_Solo_No._117_in_E_Minor.mxl',
     'Guitar_Solo_No._118_-_Barcarolle_in_A_Minor.mxl',
     'Guitar_Solo_No._119_in_G_Major.mxl',
     'Guitar_Solo_No._15_in_E_Major.mxl',
@@ -33,13 +36,19 @@ SHEETS = [
     'Minuet_in_G_minor.mxl',
     'Pavane_No._6_for_Guitar_Luis_Milan.mxl',
     'People_Imprisoned_by_Destiny.mxl',
-    'Somewhere_In_My_Memory.mxl',
     'Tango_Guitar_Solo_2.mxl',
     'Unter_dem_Lindenbaum.mxl',
     'Untitled_in_D_Major.mxl',
     'We_wish_you_a_Merry_Christmas.mxl',
     'K27_Domenico_Scarlatti.mxl',
 ]
+
+class Window(ui.Window):
+    fpsCounter = FPSCounter()
+    def update(self, dt):
+        super().update(dt)
+        self.fpsCounter.tick()
+        print(self.fpsCounter.fps)
 
 class TestViewer(unittest.TestCase):
     def test_viewer(self):

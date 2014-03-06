@@ -1,5 +1,8 @@
 from fractions import Fraction
 import numpy as np
+import re
+
+from raygllib import ui
 
 from . import sprite
 from .utils import monad, gcd
@@ -103,9 +106,49 @@ class Sheet:
         self.pages.append(page)
         return page
 
-    def finish(self):
+    def layout(self):
         for page in self.pages:
-            page.finish()
+            page.layout()
+        for measure in self.iter_measures():
+            ending = measure.ending
+            if not ending:
+                continue
+            add_sprite = measure.page.add_sprite
+            y1 = max(measure.height + Ending.HEIGHT, measure.capY) + Ending.GAP
+            y0 = y1 - Ending.HEIGHT
+            add_sprite(sprite.Line(
+                (measure.x, y0), (measure.x, y1), Ending.THICK))
+            add_sprite(sprite.Text(
+                fontSize=Ending.FONT_SIZE,
+                text='{}.'.format(ending.number),
+                x=measure.x + 10, y=-(y0 + 10),
+                color=ui.Color(0., 0., 0., 1.),
+            ))
+            add_sprite(sprite.Line(
+                (measure.x - Ending.THICK / 2, y1),
+                (measure.x + measure.width / 1.2, y1),
+                Ending.THICK))
+
+    def iter_measures(self):
+        for page in self.pages:
+            for measure in page.measures:
+                yield measure
+
+
+class Ending:
+    """
+    start: The start measure.
+    end: The end measure.
+    """
+    HEIGHT = 20
+    FONT_SIZE = 14
+    THICK = 2
+    GAP = 5
+
+    def __init__(self, number):
+        self.number = number
+        self.start = None
+        self.end = None
 
 
 class Page:
@@ -144,10 +187,7 @@ class Page:
     def add_sprite(self, sprite):
         self.sprites.append(sprite)
 
-    def pop_measure(self):
-        self.measures.pop()
-
-    def finish(self):
+    def layout(self):
         d = 2
         width, height = self.size
         self.add_sprite(sprite.Line((0, 0), (width, 0), d))
@@ -171,6 +211,7 @@ class Measure:
     def __init__(self, xmlnode):
         self.notes = []
         self.beams = []
+        self.barlines = {}
         self.width = float(xmlnode.attrib['width'])  # TODO: Handle no width situation.
         self.number = int(xmlnode.attrib['number'])
         self.isNewSystem = False
@@ -178,12 +219,14 @@ class Measure:
         self.next = None
         self.page = None
         self.clef = None
+        self.ending = None
         self.staffSpacing = 10
         self.nLines = 5
         self.timeCurrent = Fraction(0)
         self.timeDivisions = 1
         self.timeStart = Fraction(0)
         self.x = self.y = 0
+        self.capY = 0
 
     def __repr__(self):
         return 'Measure(number={number}, x={x}, y={y}, width={width})'\
@@ -220,7 +263,31 @@ class Measure:
     def set_key(self, key):
         self.key = key
 
-    def finish(self):
+    def set_ending(self, ending):
+        self.ending = ending
+
+    def add_barline(self, barline):
+        self.barlines[barline.location] = barline
+        barline.measure = self
+
+    def layout(self):
+        self._beginX = self.x
+        if 'left' in self.barlines:
+            self._beginX += BarLine.GAP * 2
+        self.layout_lines()
+        self.layout_clef()
+        self.layout_key()
+        self.layout_notes()
+        self.layout_beams()
+        self.layout_accidentals()
+        for note in self.notes:
+            note.layout()
+            self.capY = max(self.capY,
+                note.pos[1] + note.sprite.size[1] / 2)
+        # self.capY = max(self.capY, self.height)
+        self.layout_barlines()
+
+    def layout_lines(self):
         y0 = y = self.y
         x1 = self.x
         x2 = self.x + self.width
@@ -228,24 +295,12 @@ class Measure:
         for i in range(5):
             add_sprite(sprite.Line(start=(x1, y), end=(x2, y), width=self.LINE_THICK))
             y += self.staffSpacing
-        y -= self.staffSpacing
-        # add_sprite(sprite.Line(start=(x1, y0), end=(x1, y), width=self.BAR_WIDTH))
-        add_sprite(sprite.Line(start=(x2, y0), end=(x2, y), width=self.BAR_WIDTH))
-
-        self._beginX = self.x
-        self.layout_clef()
-        self.layout_key()
-        self.layout_notes()
-        self.layout_beams()
-        self.layout_accidentals()
-        for note in self.notes:
-            note.finish()
 
     def layout_clef(self):
         if self.isNewSystem:
             clef = self.clef
             cx, cy = clef.sprite.center
-            clef.sprite.pos = (self.x + cx + 5, self.get_line_y(clef.line))
+            clef.sprite.pos = (self._beginX + cx + 5, self.get_line_y(clef.line))
             self.page.add_sprite(clef.sprite)
             self._beginX = clef.sprite.pos[0] + clef.sprite.size[0] - clef.sprite.center[0] + 5
 
@@ -276,10 +331,13 @@ class Measure:
             return
         # First filter out the notes that with known positions.
         points = []
+        x0 = self.x
+        if 'left' in self.barlines:
+            x0 += BarLine.GAP * 2
         for note in self.notes:
             if note.pos:
                 x, y = note.pos
-                x += self.x
+                x += x0
                 y += self.y + self.height
                 note.pos = x, y
                 points.append((note.timeStart, x))
@@ -375,7 +433,7 @@ class Measure:
                         X = np.linalg.lstsq(A, B)[0]
                     else:
                         minError = None
-                        for k in (-.2, -.1, -.02, .02, .1, .2):
+                        for k in (-.2, -.1, -.05, .05, .1, .2):
                             up = [i for i, stem in enumerate(beam.stems)
                                 if stem.direction == 'up']
                             down = [i for i, stem in enumerate(beam.stems)
@@ -404,6 +462,9 @@ class Measure:
             for stem in beam.stems:
                 stem.beamDrawn += 1
             add_sprite(beam.sprite)
+            self.capY = max(self.capY,
+                beam.sprite.start[1] + beam.sprite.height,
+                beam.sprite.end[1] + beam.sprite.height)
 
         for note in self.iter_pitched_notes():
             stem = note.stem
@@ -416,6 +477,12 @@ class Measure:
                         type = type.replace('tail', 'tail-up')
                     pos = note.stem.tail
                     add_sprite(sprite.Texture(pos, type))
+
+    def layout_barlines(self):
+        for barline in self.barlines.values():
+            barline.layout()
+        if not self.barlines:
+            BarLine.layout_default(self)
 
     def layout_accidentals(self):
         add_sprite = self.page.add_sprite
@@ -488,7 +555,7 @@ class Note:
     def make_sprite(self):
         pass
 
-    def finish(self):
+    def layout(self):
         pass
 
     def put_dots(self):
@@ -624,7 +691,7 @@ class PitchedNote(Note):
     def make_sprite(self):
         return sprite.Texture(self.pos, self.TYPE_TO_NAME.get(self.type, 'head-4'))
 
-    def finish(self):
+    def layout(self):
         sp = self.sprite
         sp.pos = self.pos
         x, y = self.pos
@@ -667,7 +734,7 @@ class Rest(Note):
         name = self.TYPE_TO_NAME.get(self.type, 'rest-128')
         return sprite.Texture(self.pos, name)
 
-    def finish(self):
+    def layout(self):
         sp = self.sprite
         sp.pos = self.pos
         x, y = self.pos
@@ -737,3 +804,74 @@ class KeySignature:
             self.names = self.ORDER[:fifths]
         else:
             self.names = self.ORDER[::-1][:-fifths]
+
+
+class Repeat:
+    def __init__(self, xmlnode):
+        self.direction = xmlnode.attrib['direction']
+        self.times = int(xmlnode.attrib.get('times', 1))
+
+
+class BarLine:
+    linePattern = re.compile(r'(heavy|light)-(heavy|light)')
+    DEFAULT_BAR_STYLE = 'regular'
+    THICK = {'heavy': 6, 'light': 2, 'regular': 2}
+    GAP = 6
+
+    def __init__(self, xmlnode):
+        self.xmlnode = xmlnode
+        self.measure = None
+        self.location = xmlnode.attrib.get('location', 'right')
+        self.repeat = monad(xmlnode.find('repeat'), Repeat, None)
+
+    def layout(self):
+        xmlnode = self.xmlnode
+        measure = self.measure
+        barStyle = monad(
+            xmlnode.find('bar-style'), lambda x: x.text, self.DEFAULT_BAR_STYLE)
+        matched = self.linePattern.match(barStyle)
+        add_sprite = self.measure.page.add_sprite
+
+        def add_line(style):
+            nonlocal x
+            thick = self.THICK[style]
+            add_sprite(sprite.Line(
+                (x, y - measure.LINE_THICK / 2),
+                (x, y + measure.height + measure.LINE_THICK / 2),
+                thick))
+            if self.location == 'right':
+                x -= self.GAP
+            elif self.location == 'left':
+                x += self.GAP
+
+        if self.location == 'right':
+            x = measure.x + measure.width
+        elif self.location == 'left':
+            x = measure.x
+
+        y = measure.y
+        if matched:
+            left = matched.group(1)
+            right = matched.group(2)
+            if self.location == 'right':
+                add_line(right)
+                add_line(left)
+            elif self.location == 'left':
+                add_line(left)
+                add_line(right)
+        elif barStyle != 'none':
+            add_line('regular')
+
+        if self.repeat:
+            midLine = (1 + measure.nLines) / 2 
+            add_sprite(sprite.Texture((x, measure.get_line_y(midLine - .5)), 'dot'))
+            add_sprite(sprite.Texture((x, measure.get_line_y(midLine + .5)), 'dot'))
+
+
+    @classmethod
+    def layout_default(cls, measure):
+        x = measure.x + measure.width
+        measure.page.add_sprite(sprite.Line(
+            (x, measure.y - measure.LINE_THICK / 2),
+            (x, measure.y + measure.height + measure.LINE_THICK / 2),
+            cls.THICK['regular']))

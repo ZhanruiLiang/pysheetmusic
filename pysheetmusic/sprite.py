@@ -12,6 +12,8 @@ class Empty(Sprite):
 
 
 class Line(Sprite):
+    renderType = 'line'
+
     def __init__(self, start, end, width):
         self.start = start
         self.end = end
@@ -19,6 +21,8 @@ class Line(Sprite):
 
 
 class Texture(Sprite):
+    renderType = 'texture'
+
     _config = None
     TEMPLATE_DPI = 500
     MARGIN = 10
@@ -49,6 +53,8 @@ class Texture(Sprite):
 
 
 class Beam(Sprite):
+    renderType = 'beam'
+
     def __init__(self, start, end, height):
         self.start = start
         self.end = end
@@ -56,10 +62,17 @@ class Beam(Sprite):
 
 
 class Text(Sprite, ui.TextBox):
-    def __init__(self, xmlnode):
+    renderType = 'text'
+
+    def __init__(self, **kwargs):
+        ui.TextBox.__init__(self, **kwargs)
         Sprite.__init__(self)
+
+
+class CreditWords(Text):
+    def __init__(self, xmlnode):
         justify = xmlnode.attrib.get('justify', 'center')
-        ui.TextBox.__init__(self, 
+        super().__init__(
             fontSize=int(xmlnode.attrib.get('font-size', '10')),
             text=xmlnode.text,
             align='center',

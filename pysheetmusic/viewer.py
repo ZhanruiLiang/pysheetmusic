@@ -8,17 +8,17 @@ class SheetCanvas(ui.Canvas):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._renders = {
-            sprite.Line: render.LineRender(),
-            sprite.Texture: render.TextureRender(),
-            sprite.Beam: render.BeamRender(),
-            sprite.Text: render.TextRender(),
+            sprite.Line.renderType: render.LineRender(),
+            sprite.Texture.renderType: render.TextureRender(),
+            sprite.Beam.renderType: render.BeamRender(),
+            sprite.Text.renderType: render.TextRender(),
         }
         self._scale = 3
 
     def set_page(self, page):
         sps = {type: [] for type in self._renders}
         for sp in page.sprites:
-            sps[sp.__class__].append(sp)
+            sps[sp.renderType].append(sp)
         for spriteClass, sps1 in sps.items():
             self._renders[spriteClass].make_buffer(sps1)
         self._page = page

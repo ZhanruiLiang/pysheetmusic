@@ -25,6 +25,7 @@ class ParseContext:
         self.page = None
         self.measure = None
         self.beams = {}
+        self.endings = {}
 
 class MusicXMLParser:
     @staticmethod
@@ -68,17 +69,16 @@ class MusicXMLParser:
                 #   link, grouping, sound
                 if child.tag in handlers:
                     handlers[child.tag](context, child)
-            measure.finish()
+            measure.layout()
         # Parse credits
         for creditNode in xmlDoc.findall('credit'):
             pageNum = int(creditNode.attrib.get('page', '1')) - 1
             page = context.sheet.pages[pageNum]
             textNode = creditNode.find('credit-words')
             if textNode is not None:
-                textBox = sprite.Text(textNode)
-                page.add_sprite(textBox)
+                page.add_sprite(sprite.CreditWords(textNode))
 
-        context.sheet.finish()
+        context.sheet.layout()
         return context.sheet
 
     def handle_print(self, context, node):
@@ -194,7 +194,19 @@ class MusicXMLParser:
         measure.change_time(duration)
 
     def handle_barline(self, context, node):
-        pass
+        context.measure.add_barline(S.BarLine(node))
+        sheet = context.sheet
+        if node.find('ending') is not None:
+            endingNode = node.find('ending')
+            number = endingNode.attrib['number']
+            if endingNode.attrib['type'] == 'start':
+                ending = S.Ending(number)
+                context.endings[number] = ending
+                ending.start = context.measure
+            else:
+                ending = context.endings.pop(number)
+                ending.end = context.measure
+                ending.start.set_ending(ending)
 
 
 def _read_musicxml(path):

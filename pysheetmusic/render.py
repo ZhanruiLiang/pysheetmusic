@@ -113,7 +113,8 @@ class LineRender(Render):
     def __init__(self):
         super().__init__([
             (get_resouce_path('shaders', 'line.v.glsl'), gl.GL_VERTEX_SHADER),
-            (get_resouce_path('shaders', 'line-round.g.glsl'), gl.GL_GEOMETRY_SHADER),
+            # (get_resouce_path('shaders', 'line-round.g.glsl'), gl.GL_GEOMETRY_SHADER),
+            (get_resouce_path('shaders', 'line.g.glsl'), gl.GL_GEOMETRY_SHADER),
             (get_resouce_path('shaders', 'line.f.glsl'), gl.GL_FRAGMENT_SHADER),
         ], [
             ('line', 4, gl.GL_FLOAT),
