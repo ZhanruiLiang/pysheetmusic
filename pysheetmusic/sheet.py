@@ -1,11 +1,12 @@
 from fractions import Fraction
+from collections import defaultdict
 import numpy as np
 import re
 
 from raygllib import ui
 
 from . import sprite
-from .utils import monad, gcd
+from .utils import monad
 
 # All length value is represented in unit tenths.
 
@@ -69,6 +70,11 @@ class Clef:
         clef.sprite = sprite.Texture(None, 'clef-' + clef.sign)
         return clef
 
+class Tempo:
+    def __init__(self):
+        self.beatType = Fraction(1, 4)
+        self.beatsPerMinute = 180
+        self.scaler = 60 / (self.beatType * self.beatsPerMinute)
 
 class Sheet:
     """
@@ -81,6 +87,7 @@ class Sheet:
     """
 
     def __init__(self, xmlnode):
+        self.tempo = Tempo()
         self.scaling = Scaling(xmlnode.find('defaults/scaling'))
         pageLayout = xmlnode.find('defaults/page-layout')
         self.size = (
@@ -94,6 +101,17 @@ class Sheet:
                 Margins(pageLayout.find('page-margins[@type="even"]')),
                 Margins(pageLayout.find('page-margins[@type="odd"]'))]
         self.pages = []
+
+    def free(self):
+        " Break the cylic references. "
+        for page in self.pages:
+            page.sheet = None
+            for measure in page.measures:
+                measure.page = None
+                for note in measure.notes:
+                    note.measure = None
+                for barline in measure.barlines.values():
+                    barline.measure = None
 
     def new_page(self):
         page = Page()
@@ -110,30 +128,73 @@ class Sheet:
         for page in self.pages:
             page.layout()
         for measure in self.iter_measures():
-            ending = measure.ending
-            if not ending:
-                continue
-            add_sprite = measure.page.add_sprite
-            y1 = max(measure.height + Ending.HEIGHT, measure.capY) + Ending.GAP
-            y0 = y1 - Ending.HEIGHT
-            add_sprite(sprite.Line(
-                (measure.x, y0), (measure.x, y1), Ending.THICK))
-            add_sprite(sprite.Text(
-                fontSize=Ending.FONT_SIZE,
-                text='{}.'.format(ending.number),
-                x=measure.x + 10, y=-(y0 + 10),
-                color=ui.Color(0., 0., 0., 1.),
-            ))
-            add_sprite(sprite.Line(
-                (measure.x - Ending.THICK / 2, y1),
-                (measure.x + measure.width / 1.2, y1),
-                Ending.THICK))
+            measure.layout()
+            for sprite in measure.sprites:
+                sprite.put((measure.x, measure.y))
+                measure.page.add_sprite(sprite)
 
     def iter_measures(self):
         for page in self.pages:
             for measure in page.measures:
                 yield measure
 
+    def find_ending_from(self, measure, number):
+        measure0 = measure
+        while measure and (not measure.ending or measure.ending.number != number):
+            measure = measure.next
+        if measure:
+            return measure
+        measure = measure0
+        while measure and (not measure.ending or measure.ending.number != number):
+            measure = measure.prev
+        if measure:
+            return measure
+        return measure0
+
+    def flatten_measures(self):
+        INF_LOOP_COUNT = 1000000
+        self.measureSeq = seq = []
+        try:
+            measure = next(self.iter_measures())
+        except StopIteration:
+            return
+        repeatStart = measure
+        visit = defaultdict(int)
+        while len(seq) < INF_LOOP_COUNT and measure:
+            ending = measure.ending
+            visit[measure.number] += 1
+            visCount = visit[measure.number]
+            if ending and ending.number != visCount:
+                measure1 = self.find_ending_from(measure, visCount)
+                if measure1 is not measure:
+                    visit[measure1.number] += 1
+                measure = measure1
+                del measure1
+                visCount = visit[measure.number]
+            # print(measure.number, visit[measure.number])
+            seq.append(measure)
+            nextMeasure = None
+            if nextMeasure is None:
+                if 'left' in measure.barlines:
+                    barline = measure.barlines['left']
+                    repeat = barline.repeat
+                    if repeat and repeat.direction == repeat.DIR_FORWARD:
+                        repeatStart = measure
+                if repeatStart and 'right' in measure.barlines:
+                    barline = measure.barlines['right']
+                    repeat = barline.repeat
+                    if repeat and repeat.direction == repeat.DIR_BACKWARD:
+                        # print('times', repeat.times, 'vis', visCount)
+                        if visCount < repeat.times:
+                            nextMeasure = repeatStart
+                        else:
+                            repeatStart = None
+            if nextMeasure is None:
+                nextMeasure = measure.next
+            measure = nextMeasure
+
+        if len(seq) >= INF_LOOP_COUNT:
+            raise Exception('Can not flatten measures')
 
 class Ending:
     """
@@ -211,10 +272,16 @@ class Measure:
     def __init__(self, xmlnode):
         self.notes = []
         self.beams = []
+        self.sprites = []
         self.barlines = {}
         self.width = float(xmlnode.attrib['width'])  # TODO: Handle no width situation.
         self.number = int(xmlnode.attrib['number'])
         self.isNewSystem = False
+        self.isNewPage = False
+        self.topSystemDistance = 0
+        self.systemDistance = 0
+        self.measureDistance = 0
+        self.systemMargins = None
         self.prev = None
         self.next = None
         self.page = None
@@ -225,8 +292,10 @@ class Measure:
         self.timeCurrent = Fraction(0)
         self.timeDivisions = 1
         self.timeStart = Fraction(0)
+        self.timeLength = Fraction(0)
         self.x = self.y = 0
-        self.capY = 0
+        self.topY = 0
+        self.bottomY = 0
 
     def __repr__(self):
         return 'Measure(number={number}, x={x}, y={y}, width={width})'\
@@ -253,7 +322,7 @@ class Measure:
 
     def get_line_y(self, lineNumber):
         " lineNumber: [1, nLines] "
-        return self.y + (lineNumber - 1) * self.staffSpacing
+        return (lineNumber - 1) * self.staffSpacing
 
     DEFAULT_CLEF_LINE = {'G': 2, 'F': 4, 'C': 3, 'TAB': 5}
 
@@ -270,8 +339,38 @@ class Measure:
         self.barlines[barline.location] = barline
         barline.measure = self
 
+    def get_actual_pitch_level(self, pitch):
+        pitchLevel = int(
+            'C D EF G A B'.index(pitch.step) + pitch.alter
+            + pitch.octave * 12
+            - 48 + 60)
+        return pitchLevel
+
+    def add_sprite(self, sprite):
+        self.sprites.append(sprite)
+
+    def finish(self):
+        if self.notes:
+            self.timeLength = max(note.timeStart + note.duration
+                for note in self.notes)
+        for note in self.iter_pitched_notes():
+            note.pitchLevel = self.get_actual_pitch_level(note.pitch)
+
     def layout(self):
-        self._beginX = self.x
+        # Layout measure.
+        page = self.page
+        if self.isNewPage:
+            self.y = (page.size[1] - page.margins.top 
+                - self.topSystemDistance - self.height)
+        if self.isNewSystem:
+            self.x = self.systemMargins.left + page.margins.left
+            if not self.isNewPage:
+                self.y = self.prev.y \
+                    - float(self.systemDistance) - self.height
+        else:
+            self.follow_prev_layout()
+            self.x += self.measureDistance
+        self._beginX = 0
         if 'left' in self.barlines:
             self._beginX += BarLine.GAP * 2
         self.layout_lines()
@@ -282,16 +381,50 @@ class Measure:
         self.layout_accidentals()
         for note in self.notes:
             note.layout()
-            self.capY = max(self.capY,
+            self.topY = max(self.topY,
                 note.pos[1] + note.sprite.size[1] / 2)
-        # self.capY = max(self.capY, self.height)
+            self.bottomY = max(self.bottomY,
+                note.pos[1] - note.sprite.size[1] / 2)
+            if hasattr(note, 'stem') and note.stem:
+                self.topY = max(self.topY, note.stem.head[1], note.stem.tail[1])
+                self.bottomY = min(self.bottomY, note.stem.head[1], note.stem.tail[1])
         self.layout_barlines()
+        # Display measure number
+        if self.isNewSystem:
+            self.add_sprite(sprite.Text(
+                text=str(self.number),
+                fontSize=14,
+                color=ui.Color(0., 0., 0., 1.),
+                x=10,
+                y=-(-22),
+            ))
+        self.layout_ending()
+
+    def layout_ending(self):
+        ending = self.ending
+        if not ending:
+            return
+        add_sprite = self.add_sprite
+        y1 = self.topY + Ending.HEIGHT + Ending.GAP
+        y0 = y1 - Ending.HEIGHT
+        add_sprite(sprite.Line(
+            (0, y0), (0, y1), Ending.THICK))
+        add_sprite(sprite.Text(
+            fontSize=Ending.FONT_SIZE,
+            text='{}.'.format(ending.number),
+            x=10, y=-(y0 + 10),
+            color=ui.Color(0., 0., 0., 1.),
+        ))
+        add_sprite(sprite.Line(
+            (- Ending.THICK / 2, y1),
+            (self.width / 1.2, y1),
+            Ending.THICK))
 
     def layout_lines(self):
-        y0 = y = self.y
-        x1 = self.x
-        x2 = self.x + self.width
-        add_sprite = self.page.add_sprite
+        x1 = 0
+        x2 = self.width
+        add_sprite = self.add_sprite
+        y = 0
         for i in range(5):
             add_sprite(sprite.Line(start=(x1, y), end=(x2, y), width=self.LINE_THICK))
             y += self.staffSpacing
@@ -301,13 +434,14 @@ class Measure:
             clef = self.clef
             cx, cy = clef.sprite.center
             clef.sprite.pos = (self._beginX + cx + 5, self.get_line_y(clef.line))
-            self.page.add_sprite(clef.sprite)
-            self._beginX = clef.sprite.pos[0] + clef.sprite.size[0] - clef.sprite.center[0] + 5
+            self.add_sprite(clef.sprite)
+            self._beginX = \
+                clef.sprite.pos[0] + clef.sprite.size[0] - clef.sprite.center[0] + 5
 
     def layout_key(self):
         if not self.isNewSystem:
             return
-        add_sprite = self.page.add_sprite
+        add_sprite = self.add_sprite
         key = self.key
         type = 'sharp' if key.fifths >= 0 else 'flat'
         sp = sprite.Texture(None, type)
@@ -331,14 +465,14 @@ class Measure:
             return
         # First filter out the notes that with known positions.
         points = []
-        x0 = self.x
+        x0 = 0
         if 'left' in self.barlines:
             x0 += BarLine.GAP * 2
         for note in self.notes:
             if note.pos:
                 x, y = note.pos
                 x += x0
-                y += self.y + self.height
+                y += self.height
                 note.pos = x, y
                 points.append((note.timeStart, x))
         points.sort()
@@ -374,17 +508,17 @@ class Measure:
                     y = self.get_line_y(3)
             note.pos = (note.pos[0], y)
 
-        add_sprite = self.page.add_sprite
+        add_sprite = self.add_sprite
         w = self.ADD_LINE_WIDTH
         h = self.ADD_LINE_THICK
         dy = self.staffSpacing
         for note in self.notes:
             x, y = note.pos
-            y1 = self.y - dy
+            y1 = - dy
             while y1 >= y - dy / 4:
                 add_sprite(sprite.Line((x - w / 2, y1), (x + w / 2, y1), h))
                 y1 -= dy
-            y1 = self.y + self.height + dy
+            y1 = self.height + dy
             while y1 <= y + dy / 4:
                 add_sprite(sprite.Line((x - w / 2, y1), (x + w / 2, y1), h))
                 y1 += dy
@@ -398,7 +532,7 @@ class Measure:
                 yield note
 
     def layout_beams(self):
-        add_sprite = self.page.add_sprite
+        add_sprite = self.add_sprite
         for beam in sorted(self.beams, key=lambda b: -len(b.stems)):
             if beam.type == beam.TYPE_FORWARD:
                 stem1 = beam.stems[0]
@@ -462,17 +596,19 @@ class Measure:
             for stem in beam.stems:
                 stem.beamDrawn += 1
             add_sprite(beam.sprite)
-            self.capY = max(self.capY,
+            self.topY = max(self.topY,
                 beam.sprite.start[1] + beam.sprite.height,
                 beam.sprite.end[1] + beam.sprite.height)
+            self.bottomY = min(self.bottomY, beam.sprite.start[1], beam.sprite.end[1])
 
+        # Draw tails for the stems that not in any beam.
         for note in self.iter_pitched_notes():
             stem = note.stem
-            if stem and note.duration < Fraction(1, 4):
+            if stem and note.visualDuration < Fraction(1, 4):
                 if stem.beamDrawn < len(stem.beams) \
                         or (stem.beamDrawn == 0 and not stem.beams):
                     stem.beamDrawn += 1
-                    type = self.DURATION_TO_TAIL_TYPE.get(note.duration, 'tail-128')
+                    type = self.DURATION_TO_TAIL_TYPE.get(note.visualDuration, 'tail-128')
                     if stem.direction == 'up':
                         type = type.replace('tail', 'tail-up')
                     pos = note.stem.tail
@@ -485,7 +621,7 @@ class Measure:
             BarLine.layout_default(self)
 
     def layout_accidentals(self):
-        add_sprite = self.page.add_sprite
+        add_sprite = self.add_sprite
         sps = []
         for note in self.iter_pitched_notes():
             if not note.accidental:
@@ -512,7 +648,7 @@ class Measure:
                 sp.pos = (x, y)
                 iterCount += 1
             add_sprite(sp)
-            
+
     def get_abs_step(self, step, octave):
         return octave * 7 + 'CDEFGAB'.index(step.upper())
 
@@ -532,7 +668,8 @@ class Measure:
         else:
             note.chordRoot = note
             note.timeStart = self.timeCurrent
-            self.timeCurrent += note.duration * note.timeMod.value
+            self.timeCurrent += note.duration
+        assert note.timeStart >= 0
         self.notes.append(note)
         note.measure = self
 
@@ -549,9 +686,17 @@ class Note:
         self.dots = dots
         self.sprite = self.make_sprite()
         self.measure = None
+        self.timeStart = Fraction(0)
+
+    @property
+    def visualDuration(self):
+        return self.duration / Fraction(3, 2) ** len(self.dots) / self.timeMod.value
 
     def __repr__(self):
-        return 'Note(pos={pos}, duration={duration})'.format(**self.__dict__)
+        return 'Note(t0={timeStart}, duration={duration}, '\
+               'mod={timeMod.value}, dots={dots})'\
+            .format(**self.__dict__)
+
     def make_sprite(self):
         pass
 
@@ -561,7 +706,7 @@ class Note:
     def put_dots(self):
         x, y = self.pos
         w, h = self.sprite.size
-        add_sprite = self.measure.page.add_sprite
+        add_sprite = self.measure.add_sprite
         for i, dot in enumerate(self.dots):
             if dot is None:
                 dot = x + w / 2 + 4 + 5 * i, y - h / 4
@@ -571,7 +716,7 @@ class Note:
 
 class Stem:
     THICK = 1.5
-    MIN_LENGTH = 30
+    MIN_LENGTH = 35
 
     def __init__(self, xmlnode):
         self.direction = xmlnode.text.lower()
@@ -591,13 +736,18 @@ class Stem:
             return
         self._geometrySet = True
         nBeams = len(self.beams)
+        if nBeams == 0:
+            note = self.notes[0]
+            duration = note.visualDuration
+            if duration < 0.25:
+                nBeams = int(np.log2(int(1 / duration))) - 2
         xMin = min(note.pos[0] for note in self.notes)
         xMax = max(note.pos[0] for note in self.notes)
         yMin = min(note.pos[1] for note in self.notes)
         yMax = max(note.pos[1] for note in self.notes)
         r = max(
             self.MIN_LENGTH + yMax - yMin, 
-            Beam.GAP * (nBeams - 1) + Beam.THICK * nBeams,
+            self.MIN_LENGTH / 2 + (Beam.GAP + Beam.THICK) * nBeams,
         )
         w, h = self.notes[0].sprite.size
         if self.direction == 'up':
@@ -668,9 +818,11 @@ class PitchedNote(Note):
     TYPE_TO_NAME = {
         'whole': 'head-1', 'half': 'head-2', 'quarter': 'head-4',
     }
+
     def __init__(self, pos, duration, timeMod, dots, type, pitch, stem, accidental):
         self._stem = None
         self.pitch = pitch
+        self.pitchLevel = None  # This will be set when a measure finish.
         self.type = type
         self.stem = stem
         self.accidental = accidental
@@ -696,7 +848,7 @@ class PitchedNote(Note):
         sp.pos = self.pos
         x, y = self.pos
         w, h = sp.size
-        add_sprite = self.measure.page.add_sprite
+        add_sprite = self.measure.add_sprite
         if self.stem:
             add_sprite(sprite.Line(self.stem.head, self.stem.tail, Stem.THICK))
         self.put_dots()
@@ -727,7 +879,12 @@ class Rest(Note):
         duration must be Fraction.
         dots is a list of dots position. Each element can also be None.
         """
-        self.type = type if type else self.DURATION_TO_TYPE.get(duration, 'whole')
+        self.duration = duration
+        self.dots = dots
+        self.timeMod = timeMod
+        self.type = type if type else\
+            self.DURATION_TO_TYPE.get(self.visualDuration, 'whole')
+        self.measure = None
         super().__init__(pos, duration, timeMod, dots)
 
     def make_sprite(self):
@@ -739,7 +896,7 @@ class Rest(Note):
         sp.pos = self.pos
         x, y = self.pos
         w, h = sp.size
-        add_sprite = self.measure.page.add_sprite
+        add_sprite = self.measure.add_sprite
         self.put_dots()
         add_sprite(sp)
 
@@ -786,7 +943,7 @@ class Beam:
 
 class TimeModification:
     def __init__(self, xmlnode):
-        if xmlnode == None:
+        if xmlnode is None:
             self.value = Fraction(1)
         else:
             self.value = Fraction(
@@ -807,9 +964,12 @@ class KeySignature:
 
 
 class Repeat:
+    DIR_FORWARD = 'forward'
+    DIR_BACKWARD = 'backward'
+
     def __init__(self, xmlnode):
         self.direction = xmlnode.attrib['direction']
-        self.times = int(xmlnode.attrib.get('times', 1))
+        self.times = int(xmlnode.attrib.get('times', 2))
 
 
 class BarLine:
@@ -830,7 +990,7 @@ class BarLine:
         barStyle = monad(
             xmlnode.find('bar-style'), lambda x: x.text, self.DEFAULT_BAR_STYLE)
         matched = self.linePattern.match(barStyle)
-        add_sprite = self.measure.page.add_sprite
+        add_sprite = self.measure.add_sprite
 
         def add_line(style):
             nonlocal x
@@ -845,11 +1005,11 @@ class BarLine:
                 x += self.GAP
 
         if self.location == 'right':
-            x = measure.x + measure.width
+            x = measure.width
         elif self.location == 'left':
-            x = measure.x
+            x = 0
 
-        y = measure.y
+        y = 0
         if matched:
             left = matched.group(1)
             right = matched.group(2)
@@ -867,11 +1027,10 @@ class BarLine:
             add_sprite(sprite.Texture((x, measure.get_line_y(midLine - .5)), 'dot'))
             add_sprite(sprite.Texture((x, measure.get_line_y(midLine + .5)), 'dot'))
 
-
     @classmethod
     def layout_default(cls, measure):
-        x = measure.x + measure.width
-        measure.page.add_sprite(sprite.Line(
-            (x, measure.y - measure.LINE_THICK / 2),
-            (x, measure.y + measure.height + measure.LINE_THICK / 2),
+        x = measure.width
+        measure.add_sprite(sprite.Line(
+            (x, - measure.LINE_THICK / 2),
+            (x, + measure.height + measure.LINE_THICK / 2),
             cls.THICK['regular']))

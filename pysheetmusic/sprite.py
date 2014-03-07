@@ -3,12 +3,22 @@ import json
 import raygllib.ui as ui
 
 class Sprite:
-    pass
+    def put(self, pos):
+        pass
+
+    def unput(self, pos):
+        pass
 
 
 class Empty(Sprite):
     def __init__(self):
         self.size = (0, 0)
+
+def vec_add(a, b):
+    return a[0] + b[0], a[1] + b[1]
+
+def vec_minus(a, b):
+    return a[0] - b[0], a[1] - b[1]
 
 
 class Line(Sprite):
@@ -18,6 +28,14 @@ class Line(Sprite):
         self.start = start
         self.end = end
         self.width = width
+
+    def put(self, pos):
+        self.start = vec_add(self.start, pos)
+        self.end = vec_add(self.end, pos)
+
+    def unput(self, pos):
+        self.start = vec_minus(self.start, pos)
+        self.end = vec_minus(self.end, pos)
 
 
 class Texture(Sprite):
@@ -51,6 +69,12 @@ class Texture(Sprite):
         cy = (cy - m) * k
         return cx, cy, w, h
 
+    def put(self, pos):
+        self.pos = vec_add(self.pos, pos)
+
+    def upput(self, pos):
+        self.pos = vec_minus(self.pos, pos)
+
 
 class Beam(Sprite):
     renderType = 'beam'
@@ -60,6 +84,14 @@ class Beam(Sprite):
         self.end = end
         self.height = height
 
+    def put(self, pos):
+        self.start = vec_add(self.start, pos)
+        self.end = vec_add(self.end, pos)
+
+    def unput(self, pos):
+        self.start = vec_minus(self.start, pos)
+        self.end = vec_minus(self.end, pos)
+
 
 class Text(Sprite, ui.TextBox):
     renderType = 'text'
@@ -67,6 +99,16 @@ class Text(Sprite, ui.TextBox):
     def __init__(self, **kwargs):
         ui.TextBox.__init__(self, **kwargs)
         Sprite.__init__(self)
+
+    def put(self, pos):
+        x0, y0 = pos
+        self.x += x0
+        self.y -= y0
+
+    def unput(self, pos):
+        x0, y0 = pos
+        self.x -= x0
+        self.y += y0
 
 
 class CreditWords(Text):

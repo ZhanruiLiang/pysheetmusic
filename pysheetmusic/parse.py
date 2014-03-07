@@ -50,17 +50,13 @@ class MusicXMLParser:
         context.page = context.sheet.new_page()
         # Currently we only have single part support.
         partNode = xmlDoc.find('part')
-        handledTags = ('attributes', 'note', 'backup', 'forward', 'barline')
+        handledTags = ('print', 'attributes', 'note', 'backup', 'forward', 'barline')
         handlers = {tag: getattr(self, 'handle_' + tag) for tag in handledTags}
         for measureNode in partNode.findall('measure'):
             context.measure = measure = S.Measure(measureNode)
             if measureNode.find('print[@new-page="yes"]') is not None:
                 context.page = context.sheet.new_page()
             context.page.add_measure(measure)
-            if measureNode.find('print') is None:
-                measure.follow_prev_layout()
-            else:
-                self.handle_print(context, measureNode.find('print'))
             for child in measureNode.getchildren():
                 # Types handled:
                 #   note, backup, forward, attributes, print, barline
@@ -69,7 +65,7 @@ class MusicXMLParser:
                 #   link, grouping, sound
                 if child.tag in handlers:
                     handlers[child.tag](context, child)
-            measure.layout()
+            measure.finish()
         # Parse credits
         for creditNode in xmlDoc.findall('credit'):
             pageNum = int(creditNode.attrib.get('page', '1')) - 1
@@ -79,6 +75,8 @@ class MusicXMLParser:
                 page.add_sprite(sprite.CreditWords(textNode))
 
         context.sheet.layout()
+        context.sheet.flatten_measures()
+        print([measure.number for measure in context.sheet.measureSeq])
         return context.sheet
 
     def handle_print(self, context, node):
@@ -93,27 +91,32 @@ class MusicXMLParser:
             node.attrib.get('new-page', 'no').lower() == 'yes'
         # system layout
         systemMargins = S.Margins(node.find('system-layout/system-margins'))
+        measure.systemMargins = systemMargins
         if newPage:
             measure.isNewSystem = True
+            measure.isNewPage = True
             if node.find('page-layout') is not None:
                 # TODO: Adjust page layout.
                 pass
-            topSystemDistance = float(
+            measure.topSystemDistance = float(
                 node.find('system-layout/top-system-distance').text)
-            measure.y = (page.size[1] - page.margins.top - topSystemDistance
-                - measure.height)
-            measure.x = systemMargins.left + page.margins.left
+            # measure.y = (page.size[1] - page.margins.top - topSystemDistance
+            #     - measure.height)
+            # measure.x = systemMargins.left + measure.page.margins.left
         elif newSystem:
             measure.isNewSystem = True
-            measure.x = systemMargins.left + measure.page.margins.left
-            measure.y = (measure.prev.y
-                - float(node.find('system-layout/system-distance').text)
-                - measure.height)
+            # measure.x = systemMargins.left + measure.page.margins.left
+            measure.systemDistance = float(
+                node.find('system-layout/system-distance').text)
+            # measure.y = (measure.prev.y
+            #     - float(node.find('system-layout/system-distance').text)
+            #     - measure.height)
         else:
-            measure.follow_prev_layout()
-            measureDistance = node.find('measure-layout/measure-distance')
-            if measureDistance:
-                measure.x += float(measureDistance.text)
+            # measure.follow_prev_layout()
+            measure.measureDistance = monad(
+                node.find('measure-layout/measure-distance'), float, 0)
+            # if measureDistance:
+            #     measure.x += float(measureDistance.text)
 
     def handle_attributes(self, context, node):
         measure = context.measure
@@ -198,7 +201,7 @@ class MusicXMLParser:
         sheet = context.sheet
         if node.find('ending') is not None:
             endingNode = node.find('ending')
-            number = endingNode.attrib['number']
+            number = int(endingNode.attrib['number'])
             if endingNode.attrib['type'] == 'start':
                 ending = S.Ending(number)
                 context.endings[number] = ending
