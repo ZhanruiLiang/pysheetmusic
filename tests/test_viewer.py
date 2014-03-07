@@ -5,19 +5,21 @@ import raygllib.ui.key as K
 import pysheetmusic as M
 from pysheetmusic.utils import FPSCounter
 from pysheetmusic.player import Player
+from pysheetmusic.layout import PagesLayout, LinearLayout, LinearTabLayout
+from pysheetmusic.tab import attach_tab
 from os.path import join, dirname
 
 def get_path(*subPaths):
     return join(dirname(__file__), *subPaths)
 
 SHEETS = [
+    'Auld_Lang_Syne_guitar.mxl',
     'Tango_Guitar_Solo_2.mxl',
     'Air.mxl',
-    'Allegretto_in_C_Major_for_Guitar_by_Carcassi_-_arr._by_Gerry_Busch.mxl',
     'Allegro_by_Bernardo_Palma_V.mxl',
     'Somewhere_In_My_Memory.mxl',
     'Jeux_interdits.mxl',
-    'Auld_Lang_Syne_guitar.mxl',
+    'Allegretto_in_C_Major_for_Guitar_by_Carcassi_-_arr._by_Gerry_Busch.mxl',
     'Fernando_Sor_Op.32_Mazurka.mxl',
     'Fernando_Sor_Op.32_Galop.mxl',
     'Guitar_Solo_No._117_in_E_Minor.mxl',
@@ -60,11 +62,11 @@ class TestViewer(unittest.TestCase):
             _quit = True
             window.close()
         def change_page(delta):
-            nonlocal currentPage
-            currentPage = (currentPage + delta) % len(sheet.pages)
-            page = sheet.pages[currentPage]
-            viewer.canvas.set_page(page)
-            print('page', currentPage + 1, '/', len(sheet.pages))
+            if delta > 0:
+                viewer.canvas.layout.next_page()
+            elif delta < 0:
+                viewer.canvas.layout.prev_page()
+            viewer.canvas.update_layout()
         _quit = False
         player = Player()
         for name in SHEETS[:]:
@@ -74,13 +76,18 @@ class TestViewer(unittest.TestCase):
             window = ui.Window(width=1000, height=800)
             window.root.children.append(viewer)
             window.add_shortcut(K.chain(K.Q), quit)
-            window.add_shortcut(K.chain(K.RIGHT), change_page, 1)
-            window.add_shortcut(K.chain(K.LEFT), change_page, -1)
+            # window.add_shortcut(K.chain(K.RIGHT), change_page, 1)
+            # window.add_shortcut(K.chain(K.LEFT), change_page, -1)
             window.add_shortcut(K.chain(K.SHIFT, K.P), lambda: player.pause() or True)
             window.add_shortcut(K.chain(K.P), lambda: player.play() or True)
             sheet = parser.parse(get_path('sheets', name))
-            currentPage = 0
-            change_page(0)
+            attach_tab(sheet)
+            # layout = PagesLayout(sheet)
+            # layout = LinearLayout(sheet)
+            layout = LinearTabLayout(sheet)
+            layout.layout()
+            viewer.canvas.set_layout(layout)
+            # change_page(0)
             player.set_sheet(sheet)
             player.play()
             window.start()
@@ -101,6 +108,9 @@ class TestParser(unittest.TestCase):
         parser = M.parse.MusicXMLParser()
         for name in SHEETS:
             sheet = parser.parse(get_path('sheets', name))
+            attach_tab(sheet)
+            layout = LinearTabLayout(sheet)
+            layout.layout()
 
     def test_key_signagure(self):
         for mode in ('major', 'minor'):

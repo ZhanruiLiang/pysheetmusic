@@ -21,6 +21,7 @@ class Player:
         self.sheet = None
         self.state = PlayerState.STOPPED
         self.output = None
+        self.stateLock = Lock()
 
     def __del__(self):
         if self.output:
@@ -74,16 +75,18 @@ class Player:
         output = self.output
         notes = set()
         while p < len(events):
-            if self.state is PlayerState.PAUSED:
-                if notes:
-                    with self.outputLock:
-                        for note in notes:
-                            output.note_off(*args)
-                    notes.clear()
-                sleep(0.02)
-                continue
-            elif self.state is PlayerState.STOPPED:
-                return
+            with self.stateLock:
+                if self.state is PlayerState.PAUSED:
+                    if notes:
+                        with self.outputLock:
+                            for note in notes:
+                                output.note_off(*args)
+                        notes.clear()
+                    sleep(0.02)
+                    continue
+                elif self.state is PlayerState.STOPPED:
+                    return
+
             event = events[p]
             deltaTime = event.time - time
             if deltaTime > 0:
@@ -92,27 +95,31 @@ class Player:
             pitch = event.note.pitch
             level = event.note.pitchLevel
             args = level, 127, 1
-            if self.output:
-                with self.outputLock:
-                    # print('level', level, 'time', event.time, 'type', event.type)
-                    if event.type == 0:
-                        # note on
-                        output.note_on(*args)
-                        notes.add(args)
-                    else:
-                        if args in notes:
-                            output.note_off(*args)
-                            notes.discard(args)
+
+            with self.outputLock:
+                if not self.output:
+                    break
+                # print('level', level, 'time', event.time, 'type', event.type)
+                if event.type == 0:
+                    # note on
+                    output.note_on(*args)
+                    notes.add(args)
+                else:
+                    if args in notes:
+                        output.note_off(*args)
+                        notes.discard(args)
             p += 1
         self.stop()
 
     def pause(self):
-        self.state = PlayerState.PAUSED
+        with self.stateLock:
+            self.state = PlayerState.PAUSED
 
     def stop(self):
         if self.state is PlayerState.STOPPED:
             return
-        self.state = PlayerState.STOPPED
+        with self.stateLock:
+            self.state = PlayerState.STOPPED
         with self.outputLock:
             self.output.close()
             self.output = None

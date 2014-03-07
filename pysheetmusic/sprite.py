@@ -110,6 +110,10 @@ class Text(Sprite, ui.TextBox):
         self.x -= x0
         self.y += y0
 
+    def guess_size(self):
+        k = self.fontSize
+        return k * len(self.text), k * 2
+
 
 class CreditWords(Text):
     def __init__(self, xmlnode):
@@ -130,7 +134,22 @@ class CreditWords(Text):
             self.x -= self.width / 2
         elif justify == 'right':
             self.x -= self.width
+        self.y -= self.height / 2
 
-    def guess_size(self):
-        k = self.fontSize
-        return k * len(self.text), k
+
+
+class TabFingering(Text):
+    FONT_SIZE = 12
+
+    def __init__(self, pos, number):
+        super().__init__(
+            fontSize=self.FONT_SIZE,
+            text=str(int(number)),
+            align='center',
+            color=ui.Color(0., 0., 0., 1.),
+            x=pos[0],
+            y=-pos[1],
+        )
+        w, h = self.guess_size()
+        self.x -= w / 2
+        self.y -= h / 2

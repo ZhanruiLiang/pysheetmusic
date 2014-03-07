@@ -73,7 +73,7 @@ class Clef:
 class Tempo:
     def __init__(self):
         self.beatType = Fraction(1, 4)
-        self.beatsPerMinute = 180
+        self.beatsPerMinute = 120
         self.scaler = 60 / (self.beatType * self.beatsPerMinute)
 
 class Sheet:
@@ -123,15 +123,6 @@ class Sheet:
             link(self.pages[-1], page)
         self.pages.append(page)
         return page
-
-    def layout(self):
-        for page in self.pages:
-            page.layout()
-        for measure in self.iter_measures():
-            measure.layout()
-            for sprite in measure.sprites:
-                sprite.put((measure.x, measure.y))
-                measure.page.add_sprite(sprite)
 
     def iter_measures(self):
         for page in self.pages:
@@ -248,7 +239,7 @@ class Page:
     def add_sprite(self, sprite):
         self.sprites.append(sprite)
 
-    def layout(self):
+    def add_border(self):
         d = 2
         width, height = self.size
         self.add_sprite(sprite.Line((0, 0), (width, 0), d))
@@ -314,12 +305,6 @@ class Measure:
     def add_beam(self, beam):
         self.beams.append(beam)
 
-    def follow_prev_layout(self):
-        if not self.prev:
-            return
-        self.y = self.prev.y
-        self.x = self.prev.x + self.prev.width
-
     def get_line_y(self, lineNumber):
         " lineNumber: [1, nLines] "
         return (lineNumber - 1) * self.staffSpacing
@@ -356,20 +341,8 @@ class Measure:
         for note in self.iter_pitched_notes():
             note.pitchLevel = self.get_actual_pitch_level(note.pitch)
 
-    def layout(self):
+    def layout_objects(self):
         # Layout measure.
-        page = self.page
-        if self.isNewPage:
-            self.y = (page.size[1] - page.margins.top 
-                - self.topSystemDistance - self.height)
-        if self.isNewSystem:
-            self.x = self.systemMargins.left + page.margins.left
-            if not self.isNewPage:
-                self.y = self.prev.y \
-                    - float(self.systemDistance) - self.height
-        else:
-            self.follow_prev_layout()
-            self.x += self.measureDistance
         self._beginX = 0
         if 'left' in self.barlines:
             self._beginX += BarLine.GAP * 2
@@ -425,7 +398,7 @@ class Measure:
         x2 = self.width
         add_sprite = self.add_sprite
         y = 0
-        for i in range(5):
+        for i in range(self.nLines):
             add_sprite(sprite.Line(start=(x1, y), end=(x2, y), width=self.LINE_THICK))
             y += self.staffSpacing
 
@@ -484,7 +457,7 @@ class Measure:
             xs.insert(0, self._beginX)
         if ts[-1] != self.timeCurrent:
             ts.append(self.timeCurrent)
-            xs.append(self.x + self.width)
+            xs.append(self.width)
 
         t1s = []  # The time values that we need to interpolate their x value.
         notesToSet = []

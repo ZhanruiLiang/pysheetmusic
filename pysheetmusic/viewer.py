@@ -15,20 +15,24 @@ class SheetCanvas(ui.Canvas):
         }
         self._scale = 3
 
-    def set_page(self, page):
+    def set_layout(self, layout):
+        self.layout = layout
+        self.update_layout()
+
+    def update_layout(self):
+        layout = self.layout
         sps = {type: [] for type in self._renders}
-        for sp in page.sprites:
+        for sp in layout.sprites:
             sps[sp.renderType].append(sp)
         for spriteClass, sps1 in sps.items():
             self._renders[spriteClass].make_buffer(sps1)
-        self._page = page
 
     def __del__(self):
         for render in self._renders.values():
             render.free()
 
     def on_mouse_scroll(self, x, y, xs, ys):
-        scaling = self._page.sheet.scaling
+        scaling = self.layout.sheet.scaling
         k = scaling.mm / scaling.tenths * self._scale
         ds = (1 + 0.1 * ys)
         k1 = k * ds
@@ -48,12 +52,9 @@ class SheetCanvas(ui.Canvas):
         self._update_matrix()
         return True
 
-    # def on_key_press(self, symbol, modifiers):
-    #     print(symbol)
-
     def _update_matrix(self):
-        page = self._page
-        scaling = page.sheet.scaling
+        layout = self.layout
+        scaling = layout.sheet.scaling
         w, h = self.width, self.height
         vx, vy = self._viewPoint
         matrix = render.make_matrix(
@@ -73,8 +74,8 @@ class SheetCanvas(ui.Canvas):
         ], dtype=np.float32)
 
     def on_relayout(self):
-        page = self._page
-        self._viewPoint = (page.size[0] / 2, page.size[1] / 2)
+        layout = self.layout
+        self._viewPoint = layout.defaultViewPort
         self._update_matrix()
 
     def draw(self):

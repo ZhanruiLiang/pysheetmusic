@@ -74,9 +74,8 @@ class MusicXMLParser:
             if textNode is not None:
                 page.add_sprite(sprite.CreditWords(textNode))
 
-        context.sheet.layout()
         context.sheet.flatten_measures()
-        print([measure.number for measure in context.sheet.measureSeq])
+        # print([measure.number for measure in context.sheet.measureSeq])
         return context.sheet
 
     def handle_print(self, context, node):
@@ -100,23 +99,13 @@ class MusicXMLParser:
                 pass
             measure.topSystemDistance = float(
                 node.find('system-layout/top-system-distance').text)
-            # measure.y = (page.size[1] - page.margins.top - topSystemDistance
-            #     - measure.height)
-            # measure.x = systemMargins.left + measure.page.margins.left
         elif newSystem:
             measure.isNewSystem = True
-            # measure.x = systemMargins.left + measure.page.margins.left
             measure.systemDistance = float(
                 node.find('system-layout/system-distance').text)
-            # measure.y = (measure.prev.y
-            #     - float(node.find('system-layout/system-distance').text)
-            #     - measure.height)
         else:
-            # measure.follow_prev_layout()
             measure.measureDistance = monad(
                 node.find('measure-layout/measure-distance'), float, 0)
-            # if measureDistance:
-            #     measure.x += float(measureDistance.text)
 
     def handle_attributes(self, context, node):
         measure = context.measure
