@@ -144,6 +144,42 @@ class LineRender(Render):
         super().draw(gl.GL_POINTS, len(self.lineBuffer))
 
 
+class IndicatorRender(LineRender):
+    MEASURE_INDICATOR_COLOR = ui.Color(.96, .92, .37, .5)
+
+    def __init__(self):
+        super().__init__()
+        self.color = self.MEASURE_INDICATOR_COLOR
+        self.lineBuffer = gl.DynamicVertexBuffer()
+        self.widthBuffer = gl.DynamicVertexBuffer()
+        self.measure = None
+
+    def set_measure(self, measure):
+        self.measure = measure
+        self.update_buffer()
+
+    def make_buffer(self, *args):
+        pass
+
+    def update_buffer(self):
+        measure = self.measure
+        if not measure:
+            return
+        buffer = np.zeros((1, 5), dtype=gl.GLfloat)
+        # x1, y1, x2, y2, width
+        y = measure.y + (measure.bottomY + measure.topY)/ 2
+        buffer[0, 0:2] = measure.x, y
+        buffer[0, 2:4] = measure.x + measure.width, y
+        buffer[0, 4] = measure.topY - measure.bottomY
+        self.lineBuffer.set_data(buffer[:, 0:4])
+        self.widthBuffer.set_data(buffer[:, 4])
+
+    def render(self):
+        if not self.measure:
+            return
+        super().render()
+
+
 class BeamRender(Render):
     def __init__(self):
         super().__init__([

@@ -36,3 +36,8 @@ class FPSCounter:
             return (len(ticks) - 1) / (ticks[-1] - ticks[0])
         else:
             return 0.
+
+def find_one(node, path):
+    result = node.find(path)
+    if result is not None:
+        yield result

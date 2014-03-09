@@ -5,7 +5,7 @@ class Layout:
         self.sheet = sheet
         self.sprites = []
         self.size = (0, 0)
-        self.defaultViewPort = (0, 0)
+        self.defaultViewPoint = (0, 0)
 
     def layout(self):
         pass
@@ -41,7 +41,7 @@ class PagesLayout(Layout):
         page = self.sheet.pages[pageId]
         self.sprites = page.sprites
         self.size = page.size
-        self.defaultViewPort = (page.size[0] / 2, page.size[1] / 2)
+        self.defaultViewPoint = (page.size[0] / 2, page.size[1] / 2)
 
     def next_page(self):
         self.switch_page((self.pageId + 1) % len(self.sheet.pages))
@@ -72,7 +72,7 @@ class LinearLayout(Layout):
         height = - y + 100
 
         page = sheet.pages[0]
-        self.defaultViewPort = (page.size[0] / 2, -page.size[1] / 2)
+        self.defaultViewPoint = (page.size[0] / 2, -page.size[1] / 2)
         self.sprites = []
         for measure in sheet.iter_measures():
             for sprite in measure.sprites:
@@ -132,5 +132,5 @@ class LinearTabLayout(Layout):
         height = - y + 100
 
         page = sheet.pages[0]
-        self.defaultViewPort = (page.size[0] / 2, -page.size[1] / 2)
+        self.defaultViewPoint = (page.size[0] / 2, -page.size[1] / 2)
         self.size = (width, height)

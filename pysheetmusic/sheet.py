@@ -71,10 +71,21 @@ class Clef:
         return clef
 
 class Tempo:
-    def __init__(self):
-        self.beatType = Fraction(1, 4)
-        self.beatsPerMinute = 120
-        self.scaler = 60 / (self.beatType * self.beatsPerMinute)
+    def __init__(self, beatType=Fraction(1, 4), bpm=120):
+        self.beatType = beatType
+        # Beats Per Minute
+        self.bpm = bpm
+        # Convert music time to real time: scaler * musicTime = realTime
+        self.scaler = 60 / (self.beatType * self.bpm)
+
+    def __repr__(self):
+        return 'Tempo(beatType={beatType}, bpm={bpm}, scaler={scaler})'\
+            .format(**self.__dict__)
+
+class TimeSignature:
+    def __init__(self, xmlnode):
+        self.beats = int(xmlnode.find('beats').text)
+        self.beatType = Fraction(1, int(xmlnode.find('beat-type').text))
 
 class Sheet:
     """
@@ -87,7 +98,6 @@ class Sheet:
     """
 
     def __init__(self, xmlnode):
-        self.tempo = Tempo()
         self.scaling = Scaling(xmlnode.find('defaults/scaling'))
         pageLayout = xmlnode.find('defaults/page-layout')
         self.size = (
@@ -264,6 +274,7 @@ class Measure:
         self.notes = []
         self.beams = []
         self.sprites = []
+        self.tempos = [(0, Tempo())]
         self.barlines = {}
         self.width = float(xmlnode.attrib['width'])  # TODO: Handle no width situation.
         self.number = int(xmlnode.attrib['number'])
@@ -277,6 +288,7 @@ class Measure:
         self.next = None
         self.page = None
         self.clef = None
+        self.timeSig = None
         self.ending = None
         self.staffSpacing = 10
         self.nLines = 5
@@ -300,7 +312,9 @@ class Measure:
         self.nLines = refMeasure.nLines
         self.timeDivisions = refMeasure.timeDivisions
         self.clef = refMeasure.clef.copy()
+        self.add_tempo(refMeasure.tempos[-1][1])
         self.key = refMeasure.key
+        self.timeSig = refMeasure.timeSig
 
     def add_beam(self, beam):
         self.beams.append(beam)
@@ -314,6 +328,9 @@ class Measure:
     def set_clef(self, clef):
         self.clef = clef
 
+    def set_time_signature(self, timeSig):
+        self.timeSig = timeSig
+
     def set_key(self, key):
         self.key = key
 
@@ -323,6 +340,19 @@ class Measure:
     def add_barline(self, barline):
         self.barlines[barline.location] = barline
         barline.measure = self
+
+    def add_tempo(self, tempo):
+        i = 0
+        for time, tempo1 in self.tempos:
+            if time == self.timeCurrent:
+                self.tempos[i] = (time, tempo)
+                break
+            elif self.timeCurrent < time:
+                self.tempos.insert(i, (self.timeCurrent, tempo))
+                break
+            i += 1
+        else:
+            self.tempos.append((self.timeCurrent, tempo))
 
     def get_actual_pitch_level(self, pitch):
         pitchLevel = int(
@@ -352,11 +382,12 @@ class Measure:
         self.layout_notes()
         self.layout_beams()
         self.layout_accidentals()
+        self.topY = max(self.topY, self.height)
         for note in self.notes:
             note.layout()
             self.topY = max(self.topY,
                 note.pos[1] + note.sprite.size[1] / 2)
-            self.bottomY = max(self.bottomY,
+            self.bottomY = min(self.bottomY,
                 note.pos[1] - note.sprite.size[1] / 2)
             if hasattr(note, 'stem') and note.stem:
                 self.topY = max(self.topY, note.stem.head[1], note.stem.tail[1])
@@ -504,6 +535,11 @@ class Measure:
             if isinstance(note, PitchedNote):
                 yield note
 
+    def iter_rests(self):
+        for note in self.notes:
+            if isinstance(note, Rest):
+                yield note
+
     def layout_beams(self):
         add_sprite = self.add_sprite
         for beam in sorted(self.beams, key=lambda b: -len(b.stems)):
@@ -569,6 +605,7 @@ class Measure:
             for stem in beam.stems:
                 stem.beamDrawn += 1
             add_sprite(beam.sprite)
+            # Update boundaries
             self.topY = max(self.topY,
                 beam.sprite.start[1] + beam.sprite.height,
                 beam.sprite.end[1] + beam.sprite.height)
@@ -590,8 +627,26 @@ class Measure:
     def layout_barlines(self):
         for barline in self.barlines.values():
             barline.layout()
-        if not self.barlines:
+        if 'right' not in self.barlines:
             BarLine.layout_default(self)
+
+    def get_actual_time(self, time):
+        n = len(self.tempos)
+        tempos = self.tempos
+        actualTime = Fraction(0)
+        for i in range(1, n):
+            time1, tempo1 = tempos[i - 1]
+            time2, tempo2 = tempos[i]
+            if time <= time2:
+                actualTime += (time - time1) * tempo1.scaler
+                break
+            else:
+                actualTime += (time2 - time1) * tempo1.scaler
+        else:
+            time1, tempo1 = tempos[-1]
+            actualTime += (time - time1) * tempo1.scaler
+        return actualTime
+
 
     def layout_accidentals(self):
         add_sprite = self.add_sprite
@@ -663,12 +718,12 @@ class Note:
 
     @property
     def visualDuration(self):
-        return self.duration / Fraction(3, 2) ** len(self.dots) / self.timeMod.value
+        return self.duration / self.timeMod.value / (2 - Fraction(1, 2) ** len(self.dots))
 
     def __repr__(self):
-        return 'Note(t0={timeStart}, duration={duration}, '\
+        return '{cls}(t0={timeStart}, duration={duration}, '\
                'mod={timeMod.value}, dots={dots})'\
-            .format(**self.__dict__)
+            .format(cls=self.__class__.__name__, **self.__dict__)
 
     def make_sprite(self):
         pass

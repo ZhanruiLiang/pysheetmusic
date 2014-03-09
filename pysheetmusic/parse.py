@@ -10,7 +10,7 @@ from raygllib import ui
 
 from . import sheet as S
 from . import sprite
-from .utils import monad
+from .utils import monad, find_one
 
 
 class FormatError(Exception):
@@ -50,7 +50,8 @@ class MusicXMLParser:
         context.page = context.sheet.new_page()
         # Currently we only have single part support.
         partNode = xmlDoc.find('part')
-        handledTags = ('print', 'attributes', 'note', 'backup', 'forward', 'barline')
+        handledTags = (
+            'print', 'attributes', 'note', 'backup', 'forward', 'barline', 'direction')
         handlers = {tag: getattr(self, 'handle_' + tag) for tag in handledTags}
         for measureNode in partNode.findall('measure'):
             context.measure = measure = S.Measure(measureNode)
@@ -59,9 +60,9 @@ class MusicXMLParser:
             context.page.add_measure(measure)
             for child in measureNode.getchildren():
                 # Types handled:
-                #   note, backup, forward, attributes, print, barline
+                #   note, backup, forward, attributes, print, barline, direction
                 # Types not handled:
-                #   direction, harmony, figured-bass, bookmark,
+                #   harmony, figured-bass, bookmark,
                 #   link, grouping, sound
                 if child.tag in handlers:
                     handlers[child.tag](context, child)
@@ -70,8 +71,7 @@ class MusicXMLParser:
         for creditNode in xmlDoc.findall('credit'):
             pageNum = int(creditNode.attrib.get('page', '1')) - 1
             page = context.sheet.pages[pageNum]
-            textNode = creditNode.find('credit-words')
-            if textNode is not None:
+            for textNode in find_one(creditNode, 'credit-words'):
                 page.add_sprite(sprite.CreditWords(textNode))
 
         context.sheet.flatten_measures()
@@ -115,6 +115,8 @@ class MusicXMLParser:
         if node.find('clef') is not None:
             measure.set_clef(S.Clef(node.find('clef')))
         # Time
+        for timeNode in find_one(node, 'time'):
+            measure.set_time_signature(S.TimeSignature(timeNode))
         # Key
         if node.find('key') is not None:
             key = S.KeySignature(
@@ -188,8 +190,7 @@ class MusicXMLParser:
     def handle_barline(self, context, node):
         context.measure.add_barline(S.BarLine(node))
         sheet = context.sheet
-        if node.find('ending') is not None:
-            endingNode = node.find('ending')
+        for endingNode in find_one(node, 'ending'):
             number = int(endingNode.attrib['number'])
             if endingNode.attrib['type'] == 'start':
                 ending = S.Ending(number)
@@ -199,6 +200,14 @@ class MusicXMLParser:
                 ending = context.endings.pop(number)
                 ending.end = context.measure
                 ending.start.set_ending(ending)
+
+    def handle_direction(self, context, node):
+        measure = context.measure
+        for tempo in find_one(node, 'sound[@tempo]'):
+            measure.add_tempo(S.Tempo(
+                beatType=measure.timeSig.beatType,
+                bpm=int(.5 + float(tempo.attrib['tempo'])),
+            ))
 
 
 def _read_musicxml(path):

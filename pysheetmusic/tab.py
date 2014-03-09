@@ -13,7 +13,7 @@ class TabMeasure:
         self.isNewSystem = measure.isNewSystem
         self.x = 0
         self.y = 0
-        self.nLines = measure.nLines
+        self.nLines = 6
         self.measure = measure
         self.sprites = []
 
@@ -52,7 +52,19 @@ class TabMeasure:
             add_sprite(Line(start=(x1, y), end=(x2, y), width=self.LINE_THICK))
             y += self.STAFF_SPACING
 
+
 def attach_tab(sheet):
     for measure in sheet.iter_measures():
         tab = TabMeasure(measure)
         measure.tab = tab
+
+
+class Fingerings(list):
+    def __init__(self, measures):
+        super().__init__(
+            [None] * len(list(measure.iter_pitched_notes())) for measure in measures)
+
+
+def attach_fingerings(sheet, fingerings):
+    for measure, fingering in zip(sheet.iter_measures(), fingerings):
+        measure.fingering = fingering
