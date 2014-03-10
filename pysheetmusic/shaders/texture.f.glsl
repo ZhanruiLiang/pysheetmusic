@@ -5,5 +5,5 @@ in vec2 uv;
 out vec4 fragColor;
 
 void main() {
-    fragColor = texture(textureSampler, uv).a * color;
+    fragColor = texture(textureSampler, uv) * color;
 }

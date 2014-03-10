@@ -5,7 +5,7 @@ class TabMeasure:
     BOTTOM_MARGIN = 50
     BAR_WIDTH = 2.5
     LINE_THICK = 1.2
-    STAFF_SPACING = 10
+    STAFF_SPACING = 12
 
     def __init__(self, measure):
         self.isNewSystem = False
@@ -28,6 +28,24 @@ class TabMeasure:
             self.add_sprite(clefTab)
         self.layout_barlines()
         self.layout_lines()
+        self.layout_fingerings()
+
+    def layout_fingerings(self):
+        for note in self.measure.iter_pitched_notes():
+            f = note.fingering
+            if f.finger > 0:
+                x = note.pos[0]
+                y = self.get_line_y(f.string)
+                numText = str(f.fret)
+                if len(numText) == 1:
+                    self.add_sprite(Texture((x, y), 'tabnum-' + numText))
+                else:
+                    spLeft = Texture(None, 'tabnum-' + numText[0])
+                    spLeft.pos = (x - (spLeft.size[0] - spLeft.center[0]), y)
+                    self.add_sprite(spLeft)
+                    spRight = Texture(None, 'tabnum-' + numText[1])
+                    spRight.pos = (x + spRight.center[0], y)
+                    self.add_sprite(spRight)
 
     def layout_barlines(self):
         x = self.width
@@ -59,12 +77,14 @@ def attach_tab(sheet):
         measure.tab = tab
 
 
-class Fingerings(list):
-    def __init__(self, measures):
-        super().__init__(
-            [None] * len(list(measure.iter_pitched_notes())) for measure in measures)
+class Fingering:
+    def __init__(self, finger, string, fret):
+        self.finger = finger
+        self.string = string
+        self.fret = fret
 
 
-def attach_fingerings(sheet, fingerings):
-    for measure, fingering in zip(sheet.iter_measures(), fingerings):
-        measure.fingering = fingering
+def attach_fingerings(sheet):
+    for measure in sheet.iter_measures():
+        for note in measure.iter_pitched_notes():
+            note.fingering = Fingering(0, 0, 0)

@@ -140,7 +140,6 @@ class SheetViewer(ui.Widget):
         self.children.append(self.canvas)
         self.player = None
         self.layout = None
-        pyglet.clock.schedule_interval(self.update, 1 / FPS)
 
     def set_player(self, player):
         self.player = player

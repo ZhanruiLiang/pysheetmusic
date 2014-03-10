@@ -6,7 +6,7 @@ import pysheetmusic as M
 from pysheetmusic.utils import FPSCounter
 from pysheetmusic.player import Player
 from pysheetmusic.layout import PagesLayout, LinearLayout, LinearTabLayout
-from pysheetmusic.tab import attach_tab
+from pysheetmusic.tab import attach_tab, attach_fingerings
 from os.path import join, dirname
 
 def get_path(*subPaths):
@@ -80,8 +80,16 @@ class TestViewer(unittest.TestCase):
             # window.add_shortcut(K.chain(K.LEFT), change_page, -1)
             window.add_shortcut(K.chain(K.SHIFT, K.P), lambda: player.pause() or True)
             window.add_shortcut(K.chain(K.P), lambda: player.play() or True)
+
             sheet = parser.parse(get_path('sheets', name))
             attach_tab(sheet)
+            attach_fingerings(sheet)
+            import random
+            for measure in sheet.iter_measures():
+                for note in measure.iter_pitched_notes():
+                    note.fingering.finger = random.randint(0, 4)
+                    note.fingering.string = random.randint(1, 6)
+                    note.fingering.fret = random.randint(0, 15)
             # layout = PagesLayout(sheet)
             # layout = LinearLayout(sheet)
             layout = LinearTabLayout(sheet)
@@ -91,6 +99,9 @@ class TestViewer(unittest.TestCase):
             player.set_sheet(sheet)
             viewer.set_player(player)
             player.play()
+
+            pyglet.clock.schedule_interval(viewer.update, 1 / 30)
+
             window.start()
             player.stop()
             sheet.free()

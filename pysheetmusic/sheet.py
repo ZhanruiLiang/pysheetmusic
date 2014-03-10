@@ -139,6 +139,16 @@ class Sheet:
             for measure in page.measures:
                 yield measure
 
+    def iter_note_sequence(self):
+        currentTime = Fraction(0)
+        for measure in self.measureSeq:
+            A = measure.get_actual_time
+            for note in measure.iter_pitched_notes():
+                timeStart = currentTime + A(note.timeStart)
+                timeEnd = currentTime+ A(note.timeStart + note.duration)
+                yield timeStart, timeEnd, note
+            currentTime += A(measure.timeLength)
+
     def find_ending_from(self, measure, number):
         measure0 = measure
         while measure and (not measure.ending or measure.ending.number != number):

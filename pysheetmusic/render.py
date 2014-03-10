@@ -57,6 +57,7 @@ class TextureRender(Render):
         self.buffer = None
         self.textureUnit = gl.TextureUnit(0)
         self.load_templates(os.path.dirname(__file__), 'templates')
+        self.color = np.array((1, 1, 1, 1), dtype=gl.GLfloat)
 
     def load_templates(self, dir, name):
         image = PIL.Image.open(os.path.join(dir, name + '.png'))

@@ -174,7 +174,7 @@ def padded_image(image, margin):
     w1 = w + margin * 2
     h1 = h + margin * 2
     image1 = pg.Surface((w1, h1)).convert_alpha()
-    image1.fill((0, 0, 0, 0))
+    image1.fill((255, 255, 255, 0))
     image1.blit(image, (margin, margin))
     return image1
 

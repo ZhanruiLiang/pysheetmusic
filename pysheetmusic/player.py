@@ -60,17 +60,11 @@ class Player:
 
             noteEvents = []
             sheet = self.sheet
-            currentTime = Fraction(0)
-            for measure in sheet.measureSeq:
-                A = measure.get_actual_time
-                for note in measure.iter_pitched_notes():
-                    # note on
-                    time = currentTime + A(note.timeStart)
-                    noteEvents.append(NoteEvent(time, EventType.NOTE_ON, note))
-                    # note off
-                    time = currentTime+ A(note.timeStart + note.duration)
-                    noteEvents.append(NoteEvent(time, EventType.NOTE_OFF, note))
-                currentTime += A(measure.timeLength)
+            for timeStart, timeEnd, note in sheet.iter_note_sequence():
+                # note on
+                noteEvents.append(NoteEvent(timeStart, EventType.NOTE_ON, note))
+                # note off
+                noteEvents.append(NoteEvent(timeEnd, EventType.NOTE_OFF, note))
             noteEvents.sort(key=lambda x: x[:2])
 
             self.thread = thread = Thread(target=self._run, args=(noteEvents,))
