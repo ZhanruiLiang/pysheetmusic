@@ -23,12 +23,20 @@ class SheetCanvas(ui.Canvas):
 
     def set_sheet_layout(self, layout):
         self.layout = layout
+        if layout is None:
+            # Clear renderer buffers
+            for render in self._renders.values():
+                render.free_buffers()
+            self._viewPoint = (0, 0)
+            return
+
         self._viewPoint = layout.defaultViewPoint
         sps = {type: [] for type in self._renders}
         for sp in layout.sprites:
             sps[sp.renderType].append(sp)
         for renderType, sps1 in sps.items():
             self._renders[renderType].make_buffer(sps1)
+        self.on_relayout()
 
     def __del__(self):
         for render in self._renders.values():
@@ -59,6 +67,8 @@ class SheetCanvas(ui.Canvas):
 
     def _update_matrix(self):
         layout = self.layout
+        if layout is None:
+            return
         scaling = layout.sheet.scaling
         w, h = self.width, self.height
         vx, vy = self._viewPoint
@@ -80,6 +90,8 @@ class SheetCanvas(ui.Canvas):
         ], dtype=np.float32)
 
     def on_relayout(self):
+        if self.layout is None:
+            return
         layout = self.layout
         scaling = layout.sheet.scaling
         self._viewPoint = layout.defaultViewPoint
@@ -126,6 +138,8 @@ class SheetCanvas(ui.Canvas):
     ]
 
     def draw(self):
+        if self.layout is None:
+            return
         for renderType in self.RENDER_ORDER:
             r = self._renders[renderType]
             with r.batch_draw():
@@ -150,7 +164,7 @@ class SheetViewer(ui.Widget):
         self.canvas.set_sheet_layout(layout)
 
     def update(self, dt):
-        if self.layout is None:
+        if self.layout is None or self.player is None:
             return
         indicatorRender = self.canvas._renders['indicator']
         if self.player.currentMeasure is not indicatorRender.measure:

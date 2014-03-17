@@ -33,9 +33,9 @@ class TabMeasure:
     def layout_fingerings(self):
         for note in self.measure.iter_pitched_notes():
             f = note.fingering
-            if f.finger > 0:
+            if f.string > 0:
                 x = note.pos[0]
-                y = self.get_line_y(f.string)
+                y = self.get_line_y(self.nLines + 1 - f.string)
                 numText = str(f.fret)
                 if len(numText) == 1:
                     self.add_sprite(Texture((x, y), 'tabnum-' + numText))
@@ -46,6 +46,9 @@ class TabMeasure:
                     spRight = Texture(None, 'tabnum-' + numText[1])
                     spRight.pos = (x + spRight.center[0], y)
                     self.add_sprite(spRight)
+                # if f.finger > 0:
+                #     spFinger = Texture((x + 8, y - 8), 'tabnum-' + str(f.finger))
+                #     self.add_sprite(spFinger)
 
     def layout_barlines(self):
         x = self.width
@@ -79,6 +82,11 @@ def attach_tab(sheet):
 
 class Fingering:
     def __init__(self, finger, string, fret):
+        """
+        finger: 1, 2, 3, 4. 0 means no finger
+        string: 1, 2, ...
+        fret: 0, 1, 2, ...
+        """
         self.finger = finger
         self.string = string
         self.fret = fret

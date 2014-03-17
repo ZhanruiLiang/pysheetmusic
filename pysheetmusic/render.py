@@ -45,6 +45,9 @@ class Render(gl.Program):
     def render(self):
         pass
 
+    def free_buffers(self):
+        pass
+
 
 class TextureRender(Render):
     def __init__(self):
@@ -94,20 +97,25 @@ class TextureRender(Render):
             buffer[(i, i + 1, i + 4), 3] = v2
             i += 6
         buffer[:, (2, 3)] /= self.textureSize
-        if self.buffer:
-            self.buffer.free()
+        self.free_buffers()
         self.buffer = gl.VertexBuffer(buffer)
 
-    def render(self):
-        self.enable_blending()
-        self.set_default_uniforms()
-        # Set texture
-        gl.glActiveTexture(self.textureUnit.glenum)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, self.texture.glId)
-        gl.glUniform1i(self.get_uniform_loc('textureSampler'), self.textureUnit.id)
+    def free_buffers(self):
+        if self.buffer:
+            self.buffer.free()
+        self.buffer = None
 
-        self.set_buffer('xyuv', self.buffer)
-        super().draw(gl.GL_TRIANGLES, len(self.buffer))
+    def render(self):
+        if self.buffer:
+            self.enable_blending()
+            self.set_default_uniforms()
+            # Set texture
+            gl.glActiveTexture(self.textureUnit.glenum)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, self.texture.glId)
+            gl.glUniform1i(self.get_uniform_loc('textureSampler'), self.textureUnit.id)
+
+            self.set_buffer('xyuv', self.buffer)
+            super().draw(gl.GL_TRIANGLES, len(self.buffer))
 
 
 class LineRender(Render):
@@ -130,19 +138,24 @@ class LineRender(Render):
             buffer[i, (0, 1)] = line.start
             buffer[i, (2, 3)] = line.end
             buffer[i, 4] = line.width
+        self.free_buffers()
+        self.lineBuffer = gl.VertexBuffer(buffer[:, :4])
+        self.widthBuffer = gl.VertexBuffer(buffer[:, 4])
+
+    def free_buffers(self):
         if self.lineBuffer:
             self.lineBuffer.free()
         if self.widthBuffer:
             self.widthBuffer.free()
-        self.lineBuffer = gl.VertexBuffer(buffer[:, :4])
-        self.widthBuffer = gl.VertexBuffer(buffer[:, 4])
+        self.lineBuffer = self.widthBuffer = None
 
     def render(self):
-        self.enable_blending()
-        self.set_default_uniforms()
-        self.set_buffer('line', self.lineBuffer)
-        self.set_buffer('width', self.widthBuffer)
-        super().draw(gl.GL_POINTS, len(self.lineBuffer))
+        if self.lineBuffer and self.widthBuffer:
+            self.enable_blending()
+            self.set_default_uniforms()
+            self.set_buffer('line', self.lineBuffer)
+            self.set_buffer('width', self.widthBuffer)
+            super().draw(gl.GL_POINTS, len(self.lineBuffer))
 
 
 class IndicatorRender(LineRender):
@@ -160,6 +173,9 @@ class IndicatorRender(LineRender):
         self.update_buffer()
 
     def make_buffer(self, *args):
+        pass
+
+    def free_buffers(self):
         pass
 
     def update_buffer(self):
@@ -200,19 +216,24 @@ class BeamRender(Render):
             buffer[i, (0, 1)] = beam.start
             buffer[i, (2, 3)] = beam.end
             buffer[i, 4] = beam.height
+        self.free_buffers()
+        self.lineBuffer = gl.VertexBuffer(buffer[:, :4])
+        self.heightBuffer = gl.VertexBuffer(buffer[:, 4])
+
+    def free_buffers(self):
         if self.lineBuffer:
             self.lineBuffer.free()
         if self.heightBuffer:
             self.heightBuffer.free()
-        self.lineBuffer = gl.VertexBuffer(buffer[:, :4])
-        self.heightBuffer = gl.VertexBuffer(buffer[:, 4])
+        self.lineBuffer = self.heightBuffer = None
 
     def render(self):
-        self.enable_blending()
-        self.set_default_uniforms()
-        self.set_buffer('line', self.lineBuffer)
-        self.set_buffer('height', self.heightBuffer)
-        self.draw(gl.GL_POINTS, len(self.lineBuffer))
+        if self.lineBuffer and self.heightBuffer:
+            self.enable_blending()
+            self.set_default_uniforms()
+            self.set_buffer('line', self.lineBuffer)
+            self.set_buffer('height', self.heightBuffer)
+            self.draw(gl.GL_POINTS, len(self.lineBuffer))
 
 
 class TextRender(ui.render.FontRender):
@@ -238,3 +259,6 @@ class TextRender(ui.render.FontRender):
 
     def render(self):
         self.draw_textboxs(self._textboxes)
+
+    def free_buffers(self):
+        pass

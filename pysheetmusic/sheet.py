@@ -94,6 +94,7 @@ class Sheet:
     pages: A list of Page instances.
     scaling
     size
+    totalTime
     margins: margins[0] for even page, margins[1] for odd page.
     """
 
@@ -641,6 +642,7 @@ class Measure:
             BarLine.layout_default(self)
 
     def get_actual_time(self, time):
+        " return: Actual time relative to measture start, calculated from tempo. "
         n = len(self.tempos)
         tempos = self.tempos
         actualTime = Fraction(0)

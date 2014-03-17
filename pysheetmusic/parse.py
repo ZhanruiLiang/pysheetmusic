@@ -75,6 +75,8 @@ class MusicXMLParser:
                 page.add_sprite(sprite.CreditWords(textNode))
 
         context.sheet.flatten_measures()
+        context.sheet.totalTime = sum(measure.get_actual_time(measure.timeLength)
+            for measure in context.sheet.measureSeq)
         # print([measure.number for measure in context.sheet.measureSeq])
         return context.sheet
 

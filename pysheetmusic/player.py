@@ -3,10 +3,15 @@ from threading import Thread, Lock
 from fractions import Fraction
 from collections import namedtuple
 from time import sleep
+from time import time as sys_time
 
 from raygllib import ui
 
 midi.init()
+
+def get_system_time():
+    return Fraction(int(sys_time() * 1000), 1000)
+
 
 class PlayerState:
     PLAYING = 'playing'
@@ -19,6 +24,7 @@ class EventType:
     TEMPO = 2
 
 NoteEvent = namedtuple('NoteEvent', 'time type note')
+
 
 class Player:
     INST_NYLON_GUITAR = 24
@@ -34,11 +40,23 @@ class Player:
         self.outputLock = Lock()
         self.currentMeasure = None
         self.currentNotes = set()
+        self._timeLock = Lock()
+        self._currentTime = self._timeStamp = 0
+        self._pauseDeltaTime = None
 
     def __del__(self):
         if self.output:
             with self.outputLock:
                 self.output.close()
+
+    def get_current_time(self):
+        with self._timeLock:
+            if self.state == PlayerState.PLAYING:
+                return self._currentTime + (get_system_time() - self._timeStamp)
+            elif self._pauseDeltaTime is not None:
+                return self._currentTime + self._pauseDeltaTime
+            else:
+                return self._currentTime + (get_system_time() - self._timeStamp)
 
     @staticmethod
     def get_midi_output_id():
@@ -76,14 +94,17 @@ class Player:
 
     def _run(self, noteEvents):
         p = 0
-        time = Fraction(0)
-        measureRestTime = Fraction(0)
+        with self._timeLock:
+            self._currentTime = time = Fraction(0)
+            self._timeStamp = get_system_time()
         output = self.output
         notes = self.currentNotes
         notes.clear()
         self.currentMeasure = None
         while p < len(noteEvents):
             with self.stateLock:
+                if self.state is not PlayerState.PLAYING and self._pauseDeltaTime is None:
+                    self._pauseDeltaTime = get_system_time() - self._timeStamp
                 if self.state is PlayerState.PAUSED:
                     if notes:
                         with self.outputLock:
@@ -96,13 +117,15 @@ class Player:
                     notes.clear()
                     self.currentMeasure = None
                     return
+            self._pauseDeltaTime = None
 
             event = noteEvents[p]
             deltaTime = event.time - time
             if deltaTime > 0:
                 sleep(float(1 / self.speedScale * deltaTime))
-                time = event.time
-                measureRestTime -= deltaTime
+                with self._timeLock:
+                    self._currentTime = time = event.time
+                    self._timeStamp = get_system_time()
 
             pitch = event.note.pitch
             level = event.note.pitchLevel
