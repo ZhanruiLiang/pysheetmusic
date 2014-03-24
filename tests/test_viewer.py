@@ -13,6 +13,7 @@ def get_path(*subPaths):
     return join(dirname(__file__), *subPaths)
 
 SHEETS = [
+    'Score_Overview.mxl',
     # 'fifths.mxl',
     'Fernando_Sor_Op.32_Mazurka.mxl',
     'Almain.mxl',

@@ -902,7 +902,7 @@ class PitchedNote(Note):
 class Rest(Note):
     TYPE_TO_NAME = {
         'whole': 'rest-1', 'half': 'rest-2', 'quarter': 'rest-4',
-        'eighth': 'rest-8', '16th': 'rest-16', '32th': 'rest-32',
+        'eighth': 'rest-8', '16th': 'rest-16', '32nd': 'rest-32',
         '64th': 'rest-64', '128th': 'rest-128',
     }
     DURATION_TO_TYPE = {
