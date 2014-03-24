@@ -39,8 +39,12 @@ class Margins:
 
 class Scaling:
     def __init__(self, xmlnode):
-        self.mm = float(xmlnode.find('millimeters').text)
-        self.tenths = float(xmlnode.find('tenths').text)
+        if xmlnode is None:
+            self.mm = 7.05556
+            self.tenths = 40
+        else:
+            self.mm = float(xmlnode.find('millimeters').text)
+            self.tenths = float(xmlnode.find('tenths').text)
 
 class Clef:
     DEFAULT_LINE = {'G': 2, 'F': 4, 'C': 3, 'TAB': 5}
@@ -684,7 +688,7 @@ class Measure:
                         break
                 else:
                     break
-                x -= 5
+                x -= 2
                 sp.pos = (x, y)
                 iterCount += 1
             add_sprite(sp)

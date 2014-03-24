@@ -1,5 +1,5 @@
 import pygame.midi as midi
-from threading import Thread, Lock
+from threading import Thread, RLock
 from fractions import Fraction
 from collections import namedtuple
 from time import sleep
@@ -34,15 +34,14 @@ class Player:
         self.sheet = None
         self.speedScale = 1
         self.state = PlayerState.STOPPED
-        self.stateLock = Lock()
+        self.stateLock = RLock()
         self.thread = None
         self.output = None
-        self.outputLock = Lock()
+        self.outputLock = RLock()
         self.currentMeasure = None
         self.currentNotes = set()
-        self._timeLock = Lock()
-        self._currentTime = self._timeStamp = 0
-        self._pauseDeltaTime = None
+        self._timeLock = RLock()
+        self._sync_time(0)
 
     def __del__(self):
         if self.output:
@@ -52,11 +51,9 @@ class Player:
     def get_current_time(self):
         with self._timeLock:
             if self.state == PlayerState.PLAYING:
-                return self._currentTime + (get_system_time() - self._timeStamp)
-            elif self._pauseDeltaTime is not None:
-                return self._currentTime + self._pauseDeltaTime
+                return self._syncedMusicTime + (get_system_time() - self._syncedSysTime)
             else:
-                return self._currentTime + (get_system_time() - self._timeStamp)
+                return self._syncedMusicTime
 
     @staticmethod
     def get_midi_output_id():
@@ -90,21 +87,20 @@ class Player:
             self.state = PlayerState.PLAYING
             thread.start()
         else:
+            self._sync_time(self.get_current_time())
             self.state = PlayerState.PLAYING
 
     def _run(self, noteEvents):
         p = 0
         with self._timeLock:
-            self._currentTime = time = Fraction(0)
-            self._timeStamp = get_system_time()
+            time = Fraction(0)
+            self._sync_time(time)
         output = self.output
         notes = self.currentNotes
         notes.clear()
         self.currentMeasure = None
         while p < len(noteEvents):
             with self.stateLock:
-                if self.state is not PlayerState.PLAYING and self._pauseDeltaTime is None:
-                    self._pauseDeltaTime = get_system_time() - self._timeStamp
                 if self.state is PlayerState.PAUSED:
                     if notes:
                         with self.outputLock:
@@ -117,15 +113,14 @@ class Player:
                     notes.clear()
                     self.currentMeasure = None
                     return
-            self._pauseDeltaTime = None
 
             event = noteEvents[p]
             deltaTime = event.time - time
             if deltaTime > 0:
                 sleep(float(1 / self.speedScale * deltaTime))
                 with self._timeLock:
-                    self._currentTime = time = event.time
-                    self._timeStamp = get_system_time()
+                    time = event.time
+                    self._sync_time(time)
 
             pitch = event.note.pitch
             level = event.note.pitchLevel
@@ -152,15 +147,22 @@ class Player:
             self.output.close()
             self.output = None
 
+    def _sync_time(self, time):
+        with self._timeLock:
+            self._syncedSysTime = get_system_time()
+            self._syncedMusicTime = time
+
     def pause(self):
         with self.stateLock:
             self.state = PlayerState.PAUSED
+        self._sync_time(self.get_current_time())
 
     def stop(self):
         if self.state is PlayerState.STOPPED:
             return
         with self.stateLock:
             self.state = PlayerState.STOPPED
+        self._sync_time(self.get_current_time())
         if self.thread and self.thread.is_alive():
             self.thread.join()
         with self.outputLock:

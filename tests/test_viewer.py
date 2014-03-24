@@ -13,38 +13,53 @@ def get_path(*subPaths):
     return join(dirname(__file__), *subPaths)
 
 SHEETS = [
-    'Lute_Suite_No._1_in_E_Major_BWV_1006a_J.S._Bach.mxl',
-    'Allegro_by_Bernardo_Palma_V.mxl',
-    'K27_Domenico_Scarlatti.mxl',
-    'Auld_Lang_Syne_guitar.mxl',
-    'Chord_test.mxl',
-    'Untitled_in_D_Major.mxl',
-    'We_wish_you_a_Merry_Christmas.mxl',
-    'Divertimento_No._1.mxl',
-    'Giuliani_-_Op.50_No.1.mxl',
-    'Chrono_Cross_-_Quitting_the_Body.mxl',
-    'Unter_dem_Lindenbaum.mxl',
-    'Lagrima.mxl',
-    'Guitar_Solo_No._116_in_A_Major.mxl',
-    'Almain.mxl',
-    'Somewhere_In_My_Memory.mxl',
-    'Tango_Guitar_Solo_2.mxl',
-    'Air.mxl',
-    'Jeux_interdits.mxl',
-    'Allegretto_in_C_Major_for_Guitar_by_Carcassi_-_arr._by_Gerry_Busch.mxl',
+    # 'fifths.mxl',
     'Fernando_Sor_Op.32_Mazurka.mxl',
+    'Almain.mxl',
+    'Allegretto_in_C_Major_for_Guitar_by_Carcassi_-_arr._by_Gerry_Busch.mxl',
+    'Maria_Luisa_Mazurka_guitar_solo_the_original_composition.mxl',
+    'Badinerie_for_solo_guitar.mxl',
+    'Bourree_in_E_minor_BWV_996.mxl',
+    'Wachet_auf_ruft_uns_die_Stimme_fur_Gitarre_BWV_645_C-Dur.mxl',
+
+    'Minuet_in_G.mxl',
     'Fernando_Sor_Op.32_Galop.mxl',
-    'Guitar_Solo_No._117_in_E_Minor.mxl',
-    'Chrono_Cross_-_Frozen_Flame.mxl',
-    'Fernando_Sor_Op.32_Andante_Pastorale.mxl',
-    'Fernando_Sor_Op.32_Andantino.mxl',
+    'Chord_test.mxl',
+    'Unter_dem_Lindenbaum.mxl',
+    'Guitar_Solo_No._98_in_D_Major.mxl',
     'Guitar_Solo_No._118_-_Barcarolle_in_A_Minor.mxl',
     'Guitar_Solo_No._119_in_G_Major.mxl',
-    'Guitar_Solo_No._15_in_E_Major.mxl',
-    'Maria_Luisa_Mazurka_guitar_solo_the_original_composition.mxl',
-    'Minuet_in_G_minor.mxl',
-    'Pavane_No._6_for_Guitar_Luis_Milan.mxl',
+    'Untitled_in_D_Major.mxl',
+    'K27_Domenico_Scarlatti.mxl',
+    'Fernando_Sor_Op.32_Andantino.mxl',
+    'We_wish_you_a_Merry_Christmas.mxl',
+    'Canon_in_D_Major.mxl',
+    'Chrono_Cross_-_Frozen_Flame.mxl',
+    'Fernando_Sor_Op.32_Andante_Pastorale.mxl',
+    'Giuliani_-_Op.50_No.1.mxl',
+    'Allegro_by_Bernardo_Palma_V.mxl',
+    'Tango_Guitar_Solo_2.mxl',
+    'Guitar_Solo_No._116_in_A_Major.mxl',
+    'Vitorioso_Tango.mxl',
+    'Parla_piu_piano.mxl',
     'People_Imprisoned_by_Destiny.mxl',
+    'Jeux_interdits.mxl',
+    'The_Theme_from_Schindlers_List.mxl',
+    'Chrono_Cross_-_Quitting_the_Body.mxl',
+    'Debug.mxl',
+    'Pavane_No._6_for_Guitar_Luis_Milan.mxl',
+    'Minuet_in_G_minor.mxl',
+    'Somewhere_In_My_Memory.mxl',
+    'Lute_Suite_No._1_in_E_Major_BWV_1006a_J.S._Bach.mxl',
+    'Auld_Lang_Syne_guitar.mxl',
+    'Divertimento_No._1.mxl',
+    'Air.mxl',
+    'Lagrima.mxl',
+    '18_Etudes_Progressive_Pour_la_Guitare_Opus_51_Etude_15.mxl',
+    'The_Entertainer.mxl',
+    'Guitar_Solo_No._117_in_E_Minor.mxl',
+    'Etude-en-douze-exercises_3.mxl',
+    'Guitar_Solo_No._15_in_E_Major.mxl',
 ]
 
 class Window(ui.Window):
@@ -92,8 +107,8 @@ class TestViewer(unittest.TestCase):
                     note.fingering.string = random.randint(1, 6)
                     note.fingering.fret = random.randint(0, 15)
             # layout = PagesLayout(sheet)
-            # layout = LinearLayout(sheet)
-            layout = LinearTabLayout(sheet)
+            layout = LinearLayout(sheet)
+            # layout = LinearTabLayout(sheet)
             layout.layout()
             viewer.set_sheet_layout(layout)
             # change_page(0)

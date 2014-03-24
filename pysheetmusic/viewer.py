@@ -17,6 +17,7 @@ class SheetCanvas(ui.Canvas):
             sprite.Text.renderType: render.TextRender(),
             'indicator': render.IndicatorRender()
         }
+        self.color = ui.Color(0xffffcf4)
         self._scale = 1
         self._viewPoint = (0, 0)
         self.layout = None
@@ -138,6 +139,7 @@ class SheetCanvas(ui.Canvas):
     ]
 
     def draw(self):
+        self.fill_background()
         if self.layout is None:
             return
         for renderType in self.RENDER_ORDER:
